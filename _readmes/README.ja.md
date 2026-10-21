@@ -33,8 +33,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 セキュリティ強化、マルチテナント PostgreSQL、本番グレードのオブザーバビリティを備えた [OpenClaw](https://github.com/openclaw/openclaw) の Go 移植版です。
 
 🌐 **Languages:**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·

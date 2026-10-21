@@ -33,8 +33,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 향상된 보안, 멀티 테넌트 PostgreSQL, 프로덕션 수준의 관측 가능성을 갖춘 [OpenClaw](https://github.com/openclaw/openclaw)의 Go 포트입니다.
 
 🌐 **Languages:**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·

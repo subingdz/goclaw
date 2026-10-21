@@ -33,8 +33,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Μια μεταφορά σε Go του [OpenClaw](https://github.com/openclaw/openclaw) με ενισχυμένη ασφάλεια, PostgreSQL πολλαπλών μισθωτών και παρατηρησιμότητα παραγωγικού επιπέδου.
 
 🌐 **Γλώσσες:**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·

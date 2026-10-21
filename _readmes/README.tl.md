@@ -33,8 +33,8 @@ Ang **GoClaw** ay isang multi-agent AI gateway na nagkokonekta ng mga LLM sa iyo
 Isang Go port ng [OpenClaw](https://github.com/openclaw/openclaw) na may pinahusay na seguridad, multi-tenant PostgreSQL, at production-grade observability.
 
 🌐 **Mga Wika:**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·

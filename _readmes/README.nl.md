@@ -33,8 +33,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Een Go-port van [OpenClaw](https://github.com/openclaw/openclaw) met verbeterde beveiliging, multi-tenant PostgreSQL en productieklare observeerbaarheid.
 
 🌐 **Talen:**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·

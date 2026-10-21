@@ -33,8 +33,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Un portage Go de [OpenClaw](https://github.com/openclaw/openclaw) avec une sécurité renforcée, PostgreSQL multi-tenant, et une observabilité de niveau production.
 
 🌐 **Langues :**
-[🇺🇸 English](../README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
+[🇺🇸 English](README.en.md) ·
+[🇨🇳 简体中文](../README.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·
