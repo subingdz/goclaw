@@ -62,6 +62,14 @@
 [🇩🇰 Dansk](_readmes/README.da.md) ·
 [🇳🇴 Norsk](_readmes/README.nb.md)
 
+## 关于本 fork
+
+本仓库是 [GoClaw](https://github.com/nextlevelbuilder/goclaw) 的**国内生态改造版**:功能对齐上游 `dev`,并在此之上把国产模型、国产消息渠道与国内网关的实际行为做成一等公民,而不是靠外部脚本凑。下表随每个功能提交逐行增长。
+
+| 能力 | 面向国内的点 | 配置入口 |
+|---|---|---|
+| 向量与检索 | embedding 维度**以数据库列为准**:启动即读取 pgvector 列宽,provider 声明的宽度与列不一致时直接拒绝启动并打印修复命令;`goclaw migrate embed-dims --to N` 可重设定(先 `--dry-run` 列出宽度 / 待清空行数 / 索引数)。留空表示"不发送截断参数",使 bge-m3 这类原生宽度已匹配的模型可用 | 系统设置 → Embedding;Providers → Embedding |
+
 ## 核心特性
 
 - **8 阶段智能体流水线** — 上下文 → 历史 → 提示词 → 思考 → 行动 → 观察 → 记忆 → 摘要。阶段可插拔，执行路径始终启用

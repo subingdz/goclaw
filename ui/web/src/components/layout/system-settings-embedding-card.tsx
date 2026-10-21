@@ -5,11 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import { EmbeddingVectorWidth } from "@/components/layout/embedding-vector-width";
 
 interface EmbVerifyResult {
   valid: boolean;
   dimensions?: number;
   dimension_mismatch?: boolean;
+  schema_dimensions?: number;
   error?: string;
 }
 
@@ -88,7 +90,7 @@ export function SystemSettingsEmbeddingCard({
                 <>
                   {verifyResult.dimension_mismatch ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                   {verifyResult.dimension_mismatch
-                    ? t("embedding.dimensionsMismatch", { count: verifyResult.dimensions })
+                    ? t("embedding.dimensionsMismatch", { count: verifyResult.dimensions, schema: verifyResult.schema_dimensions })
                     : t("embedding.dimensions", { count: verifyResult.dimensions })}
                 </>
               ) : (
@@ -110,6 +112,8 @@ export function SystemSettingsEmbeddingCard({
             <p className="text-xs text-muted-foreground">{t("embedding.chunkOverlapHint")}</p>
           </div>
         </div>
+
+        <EmbeddingVectorWidth />
       </CardContent>
     </Card>
   );

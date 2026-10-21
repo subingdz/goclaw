@@ -103,9 +103,11 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     extra_provider_names: initialRouting?.extraProviderNames ?? [],
   });
   const initEmb = getEmbeddingSettings(provider.settings);
+  const initialEmbDims = initEmb?.dimensions != null ? String(initEmb.dimensions) : "";
   const [embEnabled, setEmbEnabled] = useState(initEmb?.enabled ?? false);
   const [embModel, setEmbModel] = useState(initEmb?.model ?? "");
   const [embApiBase, setEmbApiBase] = useState(initEmb?.api_base ?? "");
+  const [embDims, setEmbDims] = useState(initialEmbDims);
   const [reasoningThinkingLevel, setReasoningThinkingLevel] = useState(deriveLegacyThinkingLevel(initialReasoningEffort));
   const [reasoningEffort, setReasoningEffort] = useState(initialReasoningEffort);
   const [reasoningFallback, setReasoningFallback] = useState(initialReasoningFallback);
@@ -128,13 +130,13 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const savedReasoningSig = useMemo(() => reasoningSignature(initialReasoningDefaults?.effort ?? "off", initialReasoningDefaults?.fallback ?? "downgrade"), [initialReasoningDefaults?.effort, initialReasoningDefaults?.fallback]);
   const draftReasoningSig = useMemo(() => reasoningSignature(reasoningExpert ? reasoningEffort : reasoningThinkingLevel, reasoningExpert ? reasoningFallback : "downgrade"), [reasoningEffort, reasoningExpert, reasoningFallback, reasoningThinkingLevel]);
   const savedFormSig = useMemo(
-    () => providerFormSignature({ displayName: provider.display_name || "", apiKey: provider.api_key || "", savedAPIKey: provider.api_key || "", showApiKey, enabled: provider.enabled, embEnabled: initEmb?.enabled ?? false, embModel: initEmb?.model ?? "", embApiBase: initEmb?.api_base ?? "", routing: { strategy: initialRouting?.strategy ?? "priority_order", extra_provider_names: initialRouting?.extraProviderNames ?? [] }, reasoningEffort: initialReasoningDefaults?.effort ?? "off", reasoningFallback: initialReasoningDefaults?.fallback ?? "downgrade", isOAuth }),
+    () => providerFormSignature({ displayName: provider.display_name || "", apiKey: provider.api_key || "", savedAPIKey: provider.api_key || "", showApiKey, enabled: provider.enabled, embEnabled: initEmb?.enabled ?? false, embModel: initEmb?.model ?? "", embApiBase: initEmb?.api_base ?? "", embDims: initialEmbDims, routing: { strategy: initialRouting?.strategy ?? "priority_order", extra_provider_names: initialRouting?.extraProviderNames ?? [] }, reasoningEffort: initialReasoningDefaults?.effort ?? "off", reasoningFallback: initialReasoningDefaults?.fallback ?? "downgrade", isOAuth }),
     [initEmb?.api_base, initEmb?.enabled, initEmb?.model, initialReasoningDefaults?.effort, initialReasoningDefaults?.fallback, initialRouting?.extraProviderNames, initialRouting?.strategy, isOAuth, provider.api_key, provider.display_name, provider.enabled, showApiKey],
   );
   const savedFormSigRef = useRef(savedFormSig);
   const draftFormSig = useMemo(
-    () => providerFormSignature({ displayName, apiKey, savedAPIKey: provider.api_key || "", showApiKey, enabled, embEnabled, embModel, embApiBase, routing: poolRouting, reasoningEffort: reasoningExpert ? reasoningEffort : reasoningThinkingLevel, reasoningFallback: reasoningExpert ? reasoningFallback : "downgrade", isOAuth }),
-    [apiKey, displayName, embApiBase, embEnabled, embModel, enabled, isOAuth, poolRouting, provider.api_key, reasoningEffort, reasoningExpert, reasoningFallback, reasoningThinkingLevel, showApiKey],
+    () => providerFormSignature({ displayName, apiKey, savedAPIKey: provider.api_key || "", showApiKey, enabled, embEnabled, embModel, embApiBase, embDims, routing: poolRouting, reasoningEffort: reasoningExpert ? reasoningEffort : reasoningThinkingLevel, reasoningFallback: reasoningExpert ? reasoningFallback : "downgrade", isOAuth }),
+    [apiKey, displayName, embApiBase, embDims, embEnabled, embModel, enabled, isOAuth, poolRouting, provider.api_key, reasoningEffort, reasoningExpert, reasoningFallback, reasoningThinkingLevel, showApiKey],
   );
 
   // --- Sync from provider on external update ---
@@ -184,7 +186,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
 
   // --- Embedding verify ---
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
-  useEffect(() => { resetEmb(); }, [embModel, resetEmb]);
+  useEffect(() => { resetEmb(); }, [embModel, embDims, resetEmb]);
 
   // --- Save handler ---
   const [saving, setSaving] = useState(false);
@@ -197,13 +199,24 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       if (submittedAPIKey) data.api_key = submittedAPIKey;
       let nextSettings = { ...((provider.settings || {}) as Record<string, unknown>) };
       if (showEmbedding) {
-        nextSettings = { ...nextSettings, embedding: embEnabled ? { enabled: true, model: embModel.trim() || undefined, api_base: embApiBase.trim() || undefined } : { enabled: false } };
+        // Rebuild embedding from the stored object, not from scratch: this form only edits
+        // enabled/model/api_base/dimensions, and reconstructing the whole block used to drop
+        // any other sub-key (and previously erased a saved dimensions value on every save).
+        const prevEmb = (nextSettings.embedding || {}) as Record<string, unknown>;
+        const dimsText = embDims.trim();
+        const parsedDims = dimsText === "" ? undefined : Number(dimsText);
+        nextSettings = {
+          ...nextSettings,
+          embedding: embEnabled
+            ? { ...prevEmb, enabled: true, model: embModel.trim() || undefined, api_base: embApiBase.trim() || undefined, dimensions: Number.isFinite(parsedDims) && parsedDims! > 0 ? parsedDims : undefined }
+            : { enabled: false },
+        };
       }
       if (isOAuth) nextSettings = buildProviderSettingsWithChatGPTOAuthRouting(nextSettings, poolRouting);
       nextSettings = buildProviderSettingsWithReasoningDefaults(nextSettings, showReasoningDefaults ? { effort: reasoningExpert ? reasoningEffort : reasoningThinkingLevel, fallback: reasoningExpert ? reasoningFallback : "downgrade" } : null);
       data.settings = nextSettings;
       await onUpdate(provider.id, data);
-      setDisplayName(nextDisplayName); setEmbModel(embModel.trim()); setEmbApiBase(embApiBase.trim());
+      setDisplayName(nextDisplayName); setEmbModel(embModel.trim()); setEmbApiBase(embApiBase.trim()); setEmbDims(embDims.trim());
       if (submittedAPIKey) setApiKey("***");
     } catch { /* toast shown by hook */ } finally { setSaving(false); }
   };
@@ -211,7 +224,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const isDirty = displayName !== (provider.display_name || "")
     || enabled !== provider.enabled
     || (showApiKey && comparableAPIKeyValue(apiKey, provider.api_key || "", showApiKey) !== "")
-    || embEnabled !== (initEmb?.enabled ?? false) || embModel !== (initEmb?.model ?? "") || embApiBase !== (initEmb?.api_base ?? "")
+    || embEnabled !== (initEmb?.enabled ?? false) || embModel !== (initEmb?.model ?? "") || embApiBase !== (initEmb?.api_base ?? "") || embDims !== initialEmbDims
     || (isOAuth && routingSignature(poolRouting) !== routingSignature({ strategy: initialRouting?.strategy ?? "priority_order", extra_provider_names: initialRouting?.extraProviderNames ?? [] }))
     || draftReasoningSig !== savedReasoningSig;
 
@@ -289,7 +302,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       <ProviderPricingSection provider={provider} />
 
       {showEmbedding ? (
-        <ProviderEmbeddingSection embEnabled={embEnabled} setEmbEnabled={setEmbEnabled} embModel={embModel} setEmbModel={setEmbModel} embApiBase={embApiBase} setEmbApiBase={setEmbApiBase} onVerify={() => verifyEmbedding(provider.id, embModel.trim() || undefined, undefined)} verifying={embVerifying} verifyResult={embResult} />
+        <ProviderEmbeddingSection embEnabled={embEnabled} setEmbEnabled={setEmbEnabled} embModel={embModel} setEmbModel={setEmbModel} embApiBase={embApiBase} setEmbApiBase={setEmbApiBase} embDims={embDims} setEmbDims={setEmbDims} onVerify={() => verifyEmbedding(provider.id, embModel.trim() || undefined, undefined)} verifying={embVerifying} verifyResult={embResult} />
       ) : null}
 
       <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">

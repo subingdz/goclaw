@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -47,6 +48,7 @@ type ProvidersHandler struct {
 	agents          store.AgentCRUDStore    // optional: for provider pool activity agent lookup
 	modelReg        providers.ModelRegistry // optional: forward-compat model resolver for Anthropic
 	usageCaps       *usagecaps.Service
+	db              *sql.DB // optional: vector-schema reads and re-dimension (see embedding_dimensions.go)
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -180,6 +182,11 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Embedding system status (read-only)
 	mux.HandleFunc("GET /v1/embedding/status", h.readAuth(h.handleEmbeddingStatus))
+
+	// Vector column width: read the live schema, or re-dimension it (destructive; master
+	// scope + Admin + typed confirmation, and the same code path as the CLI).
+	mux.HandleFunc("GET /v1/embedding/schema", h.readAuth(h.handleEmbeddingSchema))
+	mux.HandleFunc("POST /v1/embedding/dimensions", h.auth(h.handleEmbeddingDimensions))
 
 	// Claude CLI auth status (global — not per-provider; read-only status)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.readAuth(h.handleClaudeCLIAuthStatus))
@@ -680,7 +687,7 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := validateProviderEmbeddingSettings(&p); err != nil {
+	if err := validateProviderEmbeddingSettings(&p, h.embeddingSchemaDims(r.Context())); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, err.Error())})
 		return
 	}
@@ -889,7 +896,7 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := validateProviderEmbeddingSettings(&candidate); err != nil {
+	if err := validateProviderEmbeddingSettings(&candidate, h.embeddingSchemaDims(r.Context())); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, err.Error())})
 		return
 	}

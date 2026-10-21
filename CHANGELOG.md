@@ -16,6 +16,20 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Embedding vector width is deployment-configurable** — the truth is the
+  database's own column width (`store.EmbeddingSchemaReader`), read at startup,
+  not a hard-coded constant. `goclaw migrate embed-dims --to N` re-dimensions
+  every pgvector column (drops the covering HNSW indexes, clears and re-types the
+  column, replays the index definitions — one transaction per column), with
+  `--dry-run` listing width / embedded rows / index count first. The gateway
+  refuses to start when a provider's `embedding.dimensions` disagrees with the
+  column and prints the exact command, and the same operation is available from
+  the panel's Embedding section (master scope, dry-run first, typed
+  confirmation). An *empty* dimensions means "send no truncation parameter", so
+  providers that reject it (SiliconFlow bge-m3) still work; the resolved provider
+  is probed once at startup and a measured disagreement also aborts startup with
+  both fixes spelled out.
+
 - **Task detail dialog shows the full task UUID with one-click copy** — the
   short identifier (`T-015-cc8e`) carries only the last four hex characters of
   the UUID, while the agent-facing `team_tasks` tool and RPCs take the full

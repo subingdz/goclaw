@@ -306,6 +306,16 @@ func runGateway() {
 		ttsTool.SetSystemConfigStore(pgStores.SystemConfigs)
 	}
 
+	// Embedding width is owned by the database schema. A provider that declares another
+	// width used to fail every vector write silently and show up only as worse search, so
+	// the disagreement is settled here, before any memory work is wired up.
+	if pgStores.Providers != nil {
+		if err := checkEmbeddingSchemaCompat(context.Background(), pgStores.Providers); err != nil {
+			slog.Error("embedding schema incompatible, refusing to start", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	// Recover from crashes: flip ghost 'summoning' rows to 'summon_failed'.
 	// Summon goroutines don't survive process restart; stale DB rows would trap the UI.
 	if pgStores.Agents != nil {
@@ -419,6 +429,12 @@ func runGateway() {
 	}
 
 	teamWorkEmbedder := setupMemoryEmbeddings(pgStores, providerRegistry)
+	// The provider's declared width already agreed with the schema above; this confirms the
+	// model actually answers at that width, once per boot, before any memory work is wired.
+	if err := probeEmbeddingWidth(context.Background(), pgStores.Providers, teamWorkEmbedder); err != nil {
+		slog.Error("embedding width does not match the schema, refusing to start", "error", err)
+		os.Exit(1)
+	}
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
 	// Resolve background provider for consolidation + vault enrichment.

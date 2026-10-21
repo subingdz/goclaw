@@ -15,26 +15,41 @@ type embeddingCacheEntry struct {
 	Embedding []float32
 }
 
-// lookupEmbeddingCache fetches cached embeddings for the given content hashes.
-// Returns a map from hash -> embedding vector. Missing hashes are simply absent.
-func (s *PGMemoryStore) lookupEmbeddingCache(ctx context.Context, hashes []string, provider, model string) (map[string][]float32, error) {
-	if len(hashes) == 0 {
-		return nil, nil
-	}
-
-	// Build positional params: $1..$N for hashes, $N+1 for provider, $N+2 for model
+// buildEmbeddingCacheLookup assembles the cache SELECT and its positional args.
+// Split out of lookupEmbeddingCache so the dimension filter is testable without a database.
+func buildEmbeddingCacheLookup(hashes []string, provider, model string, dims int) (string, []any) {
 	placeholders := make([]string, len(hashes))
-	args := make([]any, 0, len(hashes)+2)
+	args := make([]any, 0, len(hashes)+3)
 	for i, h := range hashes {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 		args = append(args, h)
 	}
 	args = append(args, provider, model)
 
+	// A cached vector of a different width is a different value, not a reusable one:
+	// without this filter a re-dimensioned model keeps hitting old-width rows under the
+	// same (hash, provider, model) key, and nothing reports it.
+	dimsClause := ""
+	if dims > 0 {
+		args = append(args, dims)
+		dimsClause = fmt.Sprintf(" AND dims = $%d", len(args))
+	}
+
 	query := fmt.Sprintf(
-		"SELECT hash, embedding FROM embedding_cache WHERE hash IN (%s) AND provider = $%d AND model = $%d",
-		strings.Join(placeholders, ","), len(hashes)+1, len(hashes)+2,
+		"SELECT hash, embedding FROM embedding_cache WHERE hash IN (%s) AND provider = $%d AND model = $%d%s",
+		strings.Join(placeholders, ","), len(hashes)+1, len(hashes)+2, dimsClause,
 	)
+	return query, args
+}
+
+// lookupEmbeddingCache fetches cached embeddings for the given content hashes.
+// Returns a map from hash -> embedding vector. Missing hashes are simply absent.
+func (s *PGMemoryStore) lookupEmbeddingCache(ctx context.Context, hashes []string, provider, model string, dims int) (map[string][]float32, error) {
+	if len(hashes) == 0 {
+		return nil, nil
+	}
+
+	query, args := buildEmbeddingCacheLookup(hashes, provider, model, dims)
 
 	type cacheRow struct {
 		Hash      string `db:"hash"`
@@ -52,13 +67,20 @@ func (s *PGMemoryStore) lookupEmbeddingCache(ctx context.Context, hashes []strin
 			slog.Warn("embedding cache parse error", "hash", row.Hash, "error", err)
 			continue
 		}
+		if dims > 0 && len(vec) != dims {
+			// Belt and braces: the SQL filter should already have excluded this row.
+			slog.Warn("embedding cache row width mismatch, discarding",
+				"hash", row.Hash, "provider", provider, "model", model,
+				"expected_dims", dims, "actual_dims", len(vec))
+			continue
+		}
 		result[row.Hash] = vec
 	}
 	return result, nil
 }
 
-// writeEmbeddingCache batch-upserts embedding cache entries.
-// Gracefully skips on dimension mismatch (schema uses vector(1536)).
+// writeEmbeddingCache batch-upserts embedding cache entries. Entries whose width does
+// not match this deployment's vector column are skipped, never silently.
 func (s *PGMemoryStore) writeEmbeddingCache(ctx context.Context, entries []embeddingCacheEntry, provider, model string) error {
 	if len(entries) == 0 {
 		return nil
@@ -89,11 +111,25 @@ func (s *PGMemoryStore) writeEmbeddingCache(ctx context.Context, entries []embed
 
 		_, err := s.db.ExecContext(ctx, sb.String(), args...)
 		if err != nil {
-			// pgvector dimension mismatch — skip cache gracefully
+			// pgvector dimension mismatch — the row cannot be stored. Skipping is correct,
+			// staying silent is not: without this line a misconfigured dimensions value
+			// shows up only as "search quality got worse", never as an error.
 			if strings.Contains(err.Error(), "dimensions") {
-				slog.Warn("embedding cache skipped: vector dimension mismatch",
+				// Report the width the column actually has. A build-time constant would
+				// be wrong exactly in the situation this warning exists to describe.
+				schemaDims, widthErr := memoryEmbeddingColumnWidth(ctx, s.db)
+				attrs := []any{
 					"provider", provider, "model", model,
-					"actual_dims", len(batch[0].Embedding), "error", err)
+					"actual_dims", len(batch[0].Embedding),
+					"schema_dims", schemaDims,
+					"hint", "embedding.dimensions does not match the vector column width; " +
+						"align the provider setting or run `goclaw migrate embed-dims --to <dimensions>`",
+					"error", err,
+				}
+				if widthErr != nil {
+					attrs = append(attrs, "schema_dims_error", widthErr.Error())
+				}
+				slog.Warn("embedding cache skipped: vector dimension mismatch", attrs...)
 				return nil
 			}
 			return fmt.Errorf("batch write embedding cache: %w", err)

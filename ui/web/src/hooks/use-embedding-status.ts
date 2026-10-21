@@ -7,6 +7,10 @@ interface EmbeddingStatus {
   provider?: string;
   provider_name?: string;
   model?: string;
+  // Width the memory vector columns actually declare, read from the database catalog.
+  // 0 = this backend stores no vectors (desktop/SQLite).
+  schema_dimensions?: number;
+  max_indexable_dimensions?: number;
 }
 
 export function useEmbeddingStatus() {

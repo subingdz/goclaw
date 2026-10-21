@@ -304,7 +304,7 @@ func (p *blockingAgentEmbedProvider) Embed(ctx context.Context, texts []string) 
 	}
 	result := make([][]float32, len(texts))
 	for i := range result {
-		result[i] = make([]float32, store.RequiredMemoryEmbeddingDimensions)
+		result[i] = make([]float32, store.DefaultMemoryEmbeddingDimensions)
 		result[i][0] = value
 	}
 	return result, nil
@@ -327,7 +327,7 @@ func assertAgentEmbeddingEquals(t *testing.T, db queryRower, agentID uuid.UUID, 
 }
 
 func vectorLiteral(first float64) string {
-	values := make([]string, store.RequiredMemoryEmbeddingDimensions)
+	values := make([]string, store.DefaultMemoryEmbeddingDimensions)
 	values[0] = "0.2"
 	if first == 0.1 {
 		values[0] = "0.1"

@@ -3,13 +3,17 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -90,7 +94,7 @@ func TestSubagentExecTool_NilStoreIsSafe(t *testing.T) {
 	}
 }
 
-func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[string]any {
+func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings, schemaDims int) map[string]any {
 	t.Helper()
 
 	// Pin Docker detection off so the loopback httptest URL is not rewritten
@@ -102,10 +106,16 @@ func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[stri
 		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 			t.Fatalf("Decode() error = %v", err)
 		}
+		// Answer at the width that was asked for, so the fixture cannot hide a request
+		// that the real model would have refused.
+		width := 1536.0
+		if d, ok := requestBody["dimensions"].(float64); ok && d > 0 {
+			width = d
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{{
-				"embedding": make([]float32, store.RequiredMemoryEmbeddingDimensions),
+				"embedding": make([]float32, int(width)),
 				"index":     0,
 			}},
 		})
@@ -120,7 +130,7 @@ func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[stri
 		Enabled:      true,
 	}
 
-	ep := buildEmbeddingProvider(provider, es, nil, nil)
+	ep := buildEmbeddingProvider(provider, es, nil, nil, schemaDims)
 	if ep == nil {
 		t.Fatal("buildEmbeddingProvider() = nil, want provider")
 	}
@@ -130,21 +140,30 @@ func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[stri
 	return requestBody
 }
 
-func TestBuildEmbeddingProviderDefaultsTo1536Dimensions(t *testing.T) {
-	requestBody := captureEmbeddingRequest(t, nil)
-	if got := requestBody["dimensions"]; got != float64(1536) {
-		t.Fatalf("dimensions = %v, want 1536", got)
+// An empty embedding.dimensions must mean "send nothing": several providers reject the
+// parameter outright for models whose native width already matches the column (SiliconFlow
+// answers "The parameter is invalid. Please check again." for BAAI/bge-m3), so forcing the
+// schema width here would make such a model unusable.
+func TestBuildEmbeddingProviderSendsNoTruncationWhenUndeclared(t *testing.T) {
+	for _, schemaDims := range []int{0, 1024, 1536} {
+		requestBody := captureEmbeddingRequest(t, nil, schemaDims)
+		if _, ok := requestBody["dimensions"]; ok {
+			t.Fatalf("schemaDims=%d: request carries dimensions=%v, want no truncation parameter",
+				schemaDims, requestBody["dimensions"])
+		}
 	}
 }
 
-func TestBuildEmbeddingProviderIgnoresIncompatibleStoredDimensions(t *testing.T) {
+// A declared width is passed through untouched — that is the operator asking for
+// truncation, e.g. text-embedding-3-large down to the column's 1024.
+func TestBuildEmbeddingProviderSendsDeclaredTruncation(t *testing.T) {
 	requestBody := captureEmbeddingRequest(t, &store.EmbeddingSettings{
 		Enabled:    true,
-		Model:      "voyage-4-nano",
-		Dimensions: 2048,
-	})
-	if got := requestBody["dimensions"]; got != float64(1536) {
-		t.Fatalf("dimensions = %v, want fallback 1536", got)
+		Model:      "text-embedding-3-large",
+		Dimensions: 1024,
+	}, 1024)
+	if got := requestBody["dimensions"]; got != float64(1024) {
+		t.Fatalf("dimensions = %v, want the declared 1024", got)
 	}
 }
 
@@ -207,5 +226,149 @@ func TestResolveEmbeddingProviderAutoDetectUsesMasterTenantOnly(t *testing.T) {
 	}
 	if providerStore.listAllCalled {
 		t.Fatal("ListAllProviders was called; cross-tenant auto-detect must stay disabled")
+	}
+}
+
+// probeEmbedder is a memory.EmbeddingProvider whose answer width is decided by the test.
+type probeEmbedder struct {
+	name  string
+	model string
+	width int
+	err   error
+}
+
+func (p probeEmbedder) Name() string  { return p.name }
+func (p probeEmbedder) Model() string { return p.model }
+func (p probeEmbedder) Embed(context.Context, []string) ([][]float32, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	return [][]float32{make([]float32, p.width)}, nil
+}
+
+func TestProbeEmbeddingWidth(t *testing.T) {
+	matched := &embeddingSchemaStoreStub{width: 1024}
+	tests := []struct {
+		name    string
+		stores  store.ProviderStore
+		emb     memory.EmbeddingProvider
+		wantErr string
+		wantNil bool
+	}{
+		{
+			name: "native width equals the column", stores: matched,
+			emb: probeEmbedder{name: "siliconflow", model: "BAAI/bge-m3", width: 1024}, wantNil: true,
+		},
+		{
+			name: "wider model names both fixes", stores: &embeddingSchemaStoreStub{width: 1536},
+			emb:     probeEmbedder{name: "openai", model: "text-embedding-3-large", width: 3072},
+			wantErr: "goclaw migrate embed-dims --to 3072",
+		},
+		{
+			// A quota or network failure is not a width disagreement: the gateway still
+			// serves everything that does not need embeddings.
+			name: "probe failure warns instead of aborting", stores: matched,
+			emb: probeEmbedder{name: "siliconflow", model: "m", err: errors.New("429 too many requests")}, wantNil: true,
+		},
+		{
+			name: "backend without vector columns is skipped", stores: &embeddingProviderStoreStub{},
+			emb: probeEmbedder{name: "siliconflow", model: "m", width: 1024}, wantNil: true,
+		},
+		{name: "no embedding provider is skipped", stores: matched, emb: nil, wantNil: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := probeEmbeddingWidth(context.Background(), tt.stores, tt.emb)
+			if tt.wantNil {
+				if err != nil {
+					t.Fatalf("probeEmbeddingWidth() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("probeEmbeddingWidth() = nil, want a startup-blocking mismatch")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want it to contain %q", err, tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), "set embedding.dimensions to 1536") {
+				t.Fatalf("error = %q, want it to also offer the provider-side fix", err)
+			}
+		})
+	}
+}
+
+// embeddingSchemaStoreStub is a provider store that also answers the schema-width
+// question, which is what puts the startup gate on its enforcing path.
+type embeddingSchemaStoreStub struct {
+	embeddingProviderStoreStub
+	width int
+	err   error
+}
+
+func (s *embeddingSchemaStoreStub) EmbeddingSchemaDimensions(context.Context) (int, error) {
+	return s.width, s.err
+}
+
+func embeddingDimsProvider(name string, dims int) store.LLMProviderData {
+	return store.LLMProviderData{
+		Name:         name,
+		ProviderType: store.ProviderOpenAICompat,
+		Enabled:      true,
+		Settings:     json.RawMessage(`{"embedding":{"enabled":true,"model":"m","dimensions":` + strconv.Itoa(dims) + `}}`),
+	}
+}
+
+func TestCheckEmbeddingSchemaCompat(t *testing.T) {
+	mismatched := []store.LLMProviderData{embeddingDimsProvider("wide", 1024)}
+
+	tests := []struct {
+		name    string
+		stores  store.ProviderStore
+		wantErr string
+	}{
+		{
+			// A backend with no vector columns has no width to disagree with.
+			name:    "backend without vector columns is skipped",
+			stores:  &embeddingProviderStoreStub{masterProviders: mismatched},
+			wantErr: "",
+		},
+		{
+			name:    "provider matching the column width passes",
+			stores:  &embeddingSchemaStoreStub{width: 1024, embeddingProviderStoreStub: embeddingProviderStoreStub{masterProviders: mismatched}},
+			wantErr: "",
+		},
+		{
+			name:    "provider wider than the column aborts with the migrate command",
+			stores:  &embeddingSchemaStoreStub{width: 1536, embeddingProviderStoreStub: embeddingProviderStoreStub{masterProviders: mismatched}},
+			wantErr: "goclaw migrate embed-dims --to 1024",
+		},
+		{
+			name:    "unreadable column width aborts",
+			stores:  &embeddingSchemaStoreStub{width: 0, err: errors.New("memory_chunks.embedding not found")},
+			wantErr: "goclaw migrate up",
+		},
+		{
+			name:    "unindexable column width aborts",
+			stores:  &embeddingSchemaStoreStub{width: 3072, err: errors.New("above pgvector's 2000-dimensional index ceiling")},
+			wantErr: "pgvector cannot index",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkEmbeddingSchemaCompat(context.Background(), tt.stores)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("checkEmbeddingSchemaCompat() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("checkEmbeddingSchemaCompat() = nil, want an error that names the fix")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want it to contain %q", err, tt.wantErr)
+			}
+		})
 	}
 }

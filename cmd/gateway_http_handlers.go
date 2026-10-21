@@ -82,6 +82,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 
 	if stores != nil && stores.Providers != nil {
 		providersH = httpapi.NewProvidersHandler(stores.Providers, stores.ConfigSecrets, providerReg, gatewayAddr)
+		providersH.SetDB(stores.DB)
 		providersH.SetMessageBus(msgBus)
 		providersH.SetUsageCapService(usageCapSvc)
 		if appCfg != nil {

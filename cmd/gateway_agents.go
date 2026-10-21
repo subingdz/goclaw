@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
 	geminiaudio "github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
@@ -32,6 +35,7 @@ func resolveEmbeddingProvider(
 	sysConfigs store.SystemConfigStore,
 ) memory.EmbeddingProvider {
 	masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID) // for system_configs (tenant-scoped)
+	schemaDims := embeddingSchemaDims(masterCtx, providerStore)
 
 	// 1. System config: embedding.provider (set via UI / API)
 	if sysConfigs != nil {
@@ -44,7 +48,7 @@ func resolveEmbeddingProvider(
 			if sysModel != "" {
 				mcfg = &config.MemoryConfig{EmbeddingModel: sysModel}
 			}
-			p := resolveEmbeddingFromDB(masterCtx, providerStore, name, mcfg, providerReg)
+			p := resolveEmbeddingFromDB(masterCtx, providerStore, name, mcfg, providerReg, schemaDims)
 			if p != nil {
 				slog.Info("embedding provider from system_configs", "name", name, "model", p.Model())
 				return p
@@ -71,7 +75,7 @@ func resolveEmbeddingProvider(
 			continue
 		}
 
-		ep := buildEmbeddingProvider(&dbp, es, nil, providerReg)
+		ep := buildEmbeddingProvider(&dbp, es, nil, providerReg, schemaDims)
 		if ep != nil {
 			slog.Info("embedding provider auto-detected", "name", dbp.Name, "model", ep.Model())
 			return ep
@@ -89,6 +93,7 @@ func resolveEmbeddingFromDB(
 	name string,
 	memCfg *config.MemoryConfig,
 	providerReg *providers.Registry,
+	schemaDims int,
 ) memory.EmbeddingProvider {
 	dbp, err := providerStore.GetProviderByName(ctx, name)
 	if err != nil {
@@ -103,7 +108,7 @@ func resolveEmbeddingFromDB(
 		return nil
 	}
 	es := store.ParseEmbeddingSettings(dbp.Settings)
-	return buildEmbeddingProvider(dbp, es, memCfg, providerReg)
+	return buildEmbeddingProvider(dbp, es, memCfg, providerReg, schemaDims)
 }
 
 // buildEmbeddingProvider creates a memory.EmbeddingProvider from a DB provider record.
@@ -112,6 +117,7 @@ func buildEmbeddingProvider(
 	es *store.EmbeddingSettings,
 	memCfg *config.MemoryConfig,
 	providerReg *providers.Registry,
+	schemaDims int,
 ) memory.EmbeddingProvider {
 	// Resolve model: embedding settings → memCfg override → default
 	model := "text-embedding-3-small"
@@ -131,12 +137,22 @@ func buildEmbeddingProvider(
 		apiBase = memCfg.EmbeddingAPIBase
 	}
 
-	// Dimension truncation: default to RequiredMemoryEmbeddingDimensions to match pgvector schema.
-	// Models that natively output 1536 ignore the parameter; models with larger native dims get truncated.
-	dims := store.RequiredMemoryEmbeddingDimensions
-	if es != nil && es.Dimensions > 0 && es.Dimensions != store.RequiredMemoryEmbeddingDimensions {
-		slog.Warn("ignoring incompatible provider embedding dimensions for memory schema",
-			"provider", dbp.Name, "requested", es.Dimensions, "required", store.RequiredMemoryEmbeddingDimensions)
+	// Whether to ask the endpoint for a truncated width is the provider setting's decision,
+	// not the schema's. Two models can legitimately fill the same column:
+	// text-embedding-3-large needs dimensions=1024 to shrink from its native 3072, while
+	// BAAI/bge-m3 already answers 1024 and rejects the parameter outright (SiliconFlow
+	// replies "The parameter is invalid. Please check again."). Forcing the column width
+	// here would make such a model unusable, so an empty field means "send nothing and take
+	// the native width" — which is exactly what the UI says it means.
+	dims := 0
+	if es != nil && es.Dimensions > 0 {
+		dims = es.Dimensions
+	}
+	if dims > 0 && schemaDims > 0 && dims != schemaDims {
+		// checkEmbeddingSchemaCompat already refuses to start on this, so reaching the line
+		// means a caller skipped the gate.
+		slog.Warn("provider embedding dimensions disagree with the schema",
+			"provider", dbp.Name, "requested", dims, "schema", schemaDims)
 	}
 
 	// Try registry first for the actual API key / base (handles runtime-registered providers)
@@ -162,6 +178,119 @@ func buildEmbeddingProvider(
 	}
 
 	return nil
+}
+
+// embeddingSchemaDims asks the connected backend how wide its memory vector columns
+// actually are. Zero means "this backend has no vector columns" (SQLite/desktop) or
+// "the catalog could not be read" — a value the callers below treat as nothing to
+// enforce, rather than as a width of zero.
+func embeddingSchemaDims(ctx context.Context, providerStore store.ProviderStore) int {
+	reader, ok := providerStore.(store.EmbeddingSchemaReader)
+	if !ok {
+		return 0
+	}
+	dims, err := reader.EmbeddingSchemaDimensions(ctx)
+	if err != nil {
+		slog.Warn("could not read the memory vector column width", "error", err)
+	}
+	return dims
+}
+
+// checkEmbeddingSchemaCompat refuses startup when a provider's declared embedding width
+// cannot be stored in this database.
+//
+// It has to be this blunt: a mismatch used to cost nothing at boot, then every vector
+// write failed and was swallowed, and the only visible symptom was semantic search
+// quietly getting worse. Failing here converts that into one actionable message.
+func checkEmbeddingSchemaCompat(ctx context.Context, providerStore store.ProviderStore) error {
+	reader, ok := providerStore.(store.EmbeddingSchemaReader)
+	if !ok {
+		return nil // no vector columns in this backend: there is nothing to agree with
+	}
+	width, err := reader.EmbeddingSchemaDimensions(ctx)
+	if err != nil {
+		if width > 0 {
+			// The column is readable but unindexable (pgvector caps HNSW at 2000 dims).
+			return fmt.Errorf("the memory vector column is %d-dimensional, which pgvector cannot index: "+
+				"re-dimension it to at most %d dimensions:\n"+
+				"  goclaw migrate embed-dims --to %d", width, store.MaxIndexableEmbeddingDimensions,
+				store.MaxIndexableEmbeddingDimensions)
+		}
+		return fmt.Errorf("cannot read the memory vector column width: %w\n"+
+			"Apply the schema with `goclaw migrate up`, then set the width with "+
+			"`goclaw migrate embed-dims --to <dimensions>`", err)
+	}
+
+	masterCtx := store.WithTenantID(ctx, store.MasterTenantID)
+	providerList, err := providerStore.ListProviders(masterCtx)
+	if err != nil {
+		return fmt.Errorf("list providers for the embedding dimension check: %w", err)
+	}
+
+	var problems []string
+	for _, p := range providerList {
+		if !p.Enabled || store.NoEmbeddingTypes[p.ProviderType] {
+			continue
+		}
+		es := store.ParseEmbeddingSettings(p.Settings)
+		if es == nil || !es.Enabled || es.Dimensions == 0 || es.Dimensions == width {
+			continue
+		}
+		problems = append(problems, fmt.Sprintf(
+			"provider %q declares embedding.dimensions=%d but this database stores vector(%d)\n"+
+				"  either set it to %d (or omit it), or re-dimension the schema:\n"+
+				"  goclaw migrate embed-dims --to %d",
+			p.Name, es.Dimensions, width, width, es.Dimensions))
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("%d embedding provider(s) disagree with the memory schema:\n%s",
+			len(problems), strings.Join(problems, "\n"))
+	}
+	return nil
+}
+
+// probeEmbeddingWidth asks the resolved provider for one vector and compares its length
+// with the column it has to be stored in.
+//
+// It exists because embedding.dimensions is optional: a model that already answers at the
+// column width sends no truncation parameter (several endpoints reject the parameter
+// outright), so nothing else proves the two agree before the first real write. A failed
+// probe only warns — a network or quota problem must not stop a gateway that can still
+// serve everything except semantic search — but a measured disagreement aborts startup,
+// because the alternative is the silent "search quietly got worse" failure this whole
+// change exists to remove.
+func probeEmbeddingWidth(ctx context.Context, providerStore store.ProviderStore, emb memory.EmbeddingProvider) error {
+	if emb == nil {
+		return nil
+	}
+	width := embeddingSchemaDims(ctx, providerStore)
+	if width == 0 {
+		return nil // no vector columns in this backend (SQLite/desktop)
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	vectors, err := emb.Embed(probeCtx, []string{"goclaw embedding width probe"})
+	if err != nil {
+		slog.Warn("embedding width probe skipped", "provider", emb.Name(), "model", emb.Model(), "error", err)
+		return nil
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		slog.Warn("embedding width probe returned nothing; skipping", "provider", emb.Name(), "model", emb.Model())
+		return nil
+	}
+
+	actual := len(vectors[0])
+	if actual == width {
+		slog.Info("embedding width verified", "provider", emb.Name(), "model", emb.Model(), "dimensions", actual)
+		return nil
+	}
+	return fmt.Errorf("embedding provider %q (%s) returns %d-dimensional vectors, but this database stores vector(%d)\n"+
+		"  either set embedding.dimensions to %d (only when the model supports truncation),\n"+
+		"  or re-dimension the schema to match the model:\n"+
+		"  goclaw migrate embed-dims --to %d",
+		emb.Name(), emb.Model(), actual, width, width, actual)
 }
 
 func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager, secureCLIStore store.SecureCLIStore, usageCapSvc *usagecaps.Service, admission *orchestration.ChildRunAdmission) *tools.SubagentManager {

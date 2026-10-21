@@ -71,6 +71,12 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 	return err
 }
 
+// EmbeddingSchemaDimensions reports the width of the memory vector column as the
+// database actually defines it, satisfying store.EmbeddingSchemaReader.
+func (s *PGProviderStore) EmbeddingSchemaDimensions(ctx context.Context) (int, error) {
+	return memoryEmbeddingColumnWidth(ctx, s.db)
+}
+
 func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store.LLMProviderData, error) {
 	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {

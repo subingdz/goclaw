@@ -5,7 +5,10 @@ export interface VerifyResult {
   valid: boolean;
   error?: string;
   dimensions?: number;
-  dimension_mismatch?: boolean; // true when output dims != 1536
+  // Width this deployment's vector columns actually have; 0 when the backend has none.
+  schema_dimensions?: number;
+  dimension_mismatch?: boolean; // provider width != schema width
+  remediation?: string; // CLI command that re-dimensions the schema
 }
 
 export function useProviderVerify() {

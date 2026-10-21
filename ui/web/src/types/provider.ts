@@ -51,7 +51,7 @@ export interface EmbeddingSettings {
   enabled: boolean;
   model?: string;
   api_base?: string;
-  dimensions?: number; // truncate output to N dims (e.g. 1536); 0/undefined = model default
+  dimensions?: number; // truncate output to N dims; must equal the stored vector width (0/undefined = model default)
 }
 
 export interface NormalizedChatGPTOAuthProviderRouting {

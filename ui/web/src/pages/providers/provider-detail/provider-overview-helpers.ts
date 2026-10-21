@@ -71,6 +71,7 @@ export function providerFormSignature(input: {
   embEnabled: boolean;
   embModel: string;
   embApiBase: string;
+  embDims: string;
   routing: ChatGPTOAuthRoutingConfig;
   reasoningEffort: string;
   reasoningFallback: string;
@@ -83,6 +84,7 @@ export function providerFormSignature(input: {
     embEnabled: input.embEnabled,
     embModel: input.embModel,
     embApiBase: input.embApiBase,
+    embDims: input.embDims,
     routing: input.isOAuth ? routingSignature(input.routing) : "",
     reasoning: reasoningSignature(input.reasoningEffort, input.reasoningFallback),
   });

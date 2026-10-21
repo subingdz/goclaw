@@ -153,9 +153,12 @@ type LLMProviderData struct {
 	Settings     json.RawMessage `json:"settings,omitempty" db:"settings"`
 }
 
-// RequiredMemoryEmbeddingDimensions is the fixed vector size used by the pgvector memory schema.
-// All memory embeddings must match this dimensionality until the schema supports variable sizes.
-const RequiredMemoryEmbeddingDimensions = 1536
+// DefaultMemoryEmbeddingDimensions is the width a freshly migrated schema creates
+// (vector(1536) in migrations). It is a build-time default, not a requirement: the
+// width a running deployment actually uses is read from the database catalog, because
+// a config value can disagree with the column and only the column is ever executed
+// against. Operators change the real width with `goclaw migrate embed-dims --to N`.
+const DefaultMemoryEmbeddingDimensions = 1536
 
 // EmbeddingSettings holds embedding-specific configuration stored in provider settings JSONB.
 type EmbeddingSettings struct {

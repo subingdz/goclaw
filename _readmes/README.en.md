@@ -58,6 +58,14 @@ Single binary. Production-tested. Agents that orchestrate for you.
 [🇩🇰 Dansk](README.da.md) ·
 [🇳🇴 Norsk](README.nb.md)
 
+## About this fork
+
+This repository is a **China-ecosystem edition** of [GoClaw](https://github.com/nextlevelbuilder/goclaw): it tracks upstream `dev` and additionally treats domestic models, domestic messaging channels and the real behaviour of Chinese gateways as first-class, instead of leaving them to external glue. The table below grows one row per feature commit.
+
+| Area | What it means for the domestic ecosystem | Where to configure |
+|---|---|---|
+| Vectors & retrieval | The embedding width is owned by **the database column**: the gateway reads the pgvector column width at startup and refuses to start when a provider declares a different one, printing the exact fix; `goclaw migrate embed-dims --to N` re-dimensions columns (`--dry-run` first, listing width / rows to clear / indexes). Leaving the field empty means "send no truncation parameter", so models whose native width already matches (bge-m3) stay usable | System settings → Embedding; Providers → Embedding |
+
 ## Core Features
 
 - **8-Stage Agent Pipeline** — context → history → prompt → think → act → observe → memory → summarize. Pluggable stages, always-on execution

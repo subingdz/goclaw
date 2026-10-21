@@ -409,7 +409,59 @@ func setupProvidersAdminToken(t *testing.T) string {
 	return token
 }
 
-func TestProvidersHandlerCreateRejectsIncompatibleEmbeddingDimensions(t *testing.T) {
+// schemaAwareProviderStore reports a memory vector column width, which is what turns
+// the handler's dimension check from "always skipped" into the rule deployments hit.
+type schemaAwareProviderStore struct {
+	*mockProviderStore
+	schemaDims int
+}
+
+func (s *schemaAwareProviderStore) EmbeddingSchemaDimensions(context.Context) (int, error) {
+	return s.schemaDims, nil
+}
+
+func TestProvidersHandlerCreateRejectsDimensionsThatDisagreeWithSchema(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := &schemaAwareProviderStore{mockProviderStore: newMockProviderStore(), schemaDims: 1536}
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	body := `{
+		"name": "voyage",
+		"provider_type": "openai_compat",
+		"api_base": "https://api.voyageai.com/v1",
+		"enabled": true,
+		"settings": {
+			"embedding": {
+				"enabled": true,
+				"model": "voyage-4-nano",
+				"dimensions": 1024
+			}
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/providers", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	for _, want := range []string{"vector(1536)", "goclaw migrate embed-dims --to 1024"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("response body = %q, want mention of %q", w.Body.String(), want)
+		}
+	}
+	if len(providerStore.providers) != 0 {
+		t.Fatalf("provider store mutated on invalid create: %#v", providerStore.providers)
+	}
+}
+
+// The plain mock store implements no vector columns, so only the pgvector index ceiling
+// can refuse this create — a width no deployment could ever index.
+func TestProvidersHandlerCreateRejectsUnindexableEmbeddingDimensions(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
 	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
@@ -438,17 +490,17 @@ func TestProvidersHandlerCreateRejectsIncompatibleEmbeddingDimensions(t *testing
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status code = %d, want %d", w.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(w.Body.String(), "1536") {
-		t.Fatalf("response body = %q, want mention of 1536", w.Body.String())
+	if !strings.Contains(w.Body.String(), "index ceiling") {
+		t.Fatalf("response body = %q, want mention of the pgvector index ceiling", w.Body.String())
 	}
 	if len(providerStore.providers) != 0 {
 		t.Fatalf("provider store mutated on invalid create: %#v", providerStore.providers)
 	}
 }
 
-func TestProvidersHandlerCreateAllows1536EmbeddingDimensions(t *testing.T) {
+func TestProvidersHandlerCreateAllowsEmbeddingDimensionsMatchingSchema(t *testing.T) {
 	token := setupProvidersAdminToken(t)
-	providerStore := newMockProviderStore()
+	providerStore := &schemaAwareProviderStore{mockProviderStore: newMockProviderStore(), schemaDims: 1536}
 	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
@@ -763,7 +815,10 @@ func TestProvidersHandlerUpdateMarshalsSettingsForStore(t *testing.T) {
 	}
 }
 
-func TestProvidersHandlerUpdateRejectsIncompatibleEmbeddingDimensions(t *testing.T) {
+// The mock provider store implements no vector columns, so this request is refused by
+// the pgvector index ceiling rather than by a schema width: 2048 could never be indexed
+// in any deployment.
+func TestProvidersHandlerUpdateRejectsUnindexableEmbeddingDimensions(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
 	provider := &store.LLMProviderData{

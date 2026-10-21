@@ -18,7 +18,7 @@ import (
 type PGMemoryStore struct {
 	db       *sql.DB
 	provider store.EmbeddingProvider
-	mu       sync.RWMutex   // protects cfg from concurrent read/write
+	mu       sync.RWMutex // protects cfg from concurrent read/write
 	cfg      PGMemoryConfig
 }
 
@@ -272,8 +272,13 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 			hashes[i] = memory.ContentHash(c.Text)
 		}
 
-		// Batch lookup cached embeddings
-		cached, cacheErr := s.lookupEmbeddingCache(ctx, hashes, providerName, providerModel)
+		// Batch lookup cached embeddings. Filtering by the configured width keeps a
+		// re-dimensioned model from being served old-width vectors out of the cache.
+		lookupDims := 0
+		if da, ok := s.provider.(interface{ Dimensions() int }); ok {
+			lookupDims = da.Dimensions()
+		}
+		cached, cacheErr := s.lookupEmbeddingCache(ctx, hashes, providerName, providerModel, lookupDims)
 		if cacheErr != nil {
 			slog.Warn("embedding cache lookup failed, falling back to full API call",
 				"path", path, "error", cacheErr)

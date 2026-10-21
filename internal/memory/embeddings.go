@@ -181,6 +181,11 @@ func (p *OpenAIEmbeddingProvider) WithDimensions(d int) *OpenAIEmbeddingProvider
 func (p *OpenAIEmbeddingProvider) Name() string  { return p.name }
 func (p *OpenAIEmbeddingProvider) Model() string { return p.model }
 
+// Dimensions reports the configured output width, or 0 when the model default applies.
+// Reached through an optional interface (like the channel capability interfaces) so the
+// EmbeddingProvider contract and every existing implementation stay unchanged.
+func (p *OpenAIEmbeddingProvider) Dimensions() int { return p.dimensions }
+
 func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	reqBody := map[string]any{
 		"input": texts,
