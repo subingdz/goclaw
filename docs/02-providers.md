@@ -54,6 +54,101 @@ Streaming fallback is conservative: backup models are tried only if the stream f
 
 ---
 
+## Per-Turn Model Routing
+
+`model_fallback` reacts to a failed call. Routing decides **before** the call, from what the turn
+itself asks for, and lives in `agents.other_config.model_routing` (no migration; the same bag that
+holds `prompt_mode`, `pinned_skills` and `delivery_behavior`). Code:
+`internal/agent/model_routing.go` (rules) and `internal/agent/model_routing_llm.go` (classifier),
+with the contract types in `internal/store/agent_model_routing.go`.
+
+```json5
+{
+  "model_routing": {
+    "enabled": true,
+    "tiers": [
+      { "name": "heavy", "model": "deepseek-r1", "provider": "silicon",
+        "hint": "long code changes and multi-file refactors",
+        "min_runes": 800, "requires_code": true },
+      { "name": "greetings", "model": "glm-4-flash", "provider": "zhipu",
+        "hint": "one-line social replies", "run_kinds": ["user"], "min_runes": 1 }
+    ],
+    "classifier": { "model": "qwen-turbo", "timeout_ms": 4000, "cache_ttl_seconds": 600 }
+  }
+}
+```
+
+**Tiers are ordered and the first match wins.** GoClaw does not know which model is stronger — no
+provider publishes that — so ranking is the operator's decision, written as list order plus
+thresholds, and never inferred. Every *declared* condition on a tier must hold (AND); a zero value
+means "not a condition", so a tier with only a `model` matches every turn. Signals available before
+the turn does any work: character count, token estimate (agent's own tokenizer, so treat
+`min_tokens` as an estimate), whether the text carries a fenced code block or a crash signature,
+attachment count, and the run kind (`user`, `delegation`, `announce`). At most 8 tiers.
+
+**Precedence.** A caller-supplied `ModelOverride` wins outright — cron, heartbeat, webhook and
+subagent-spawn all name a model on purpose, and a per-agent policy must not second-guess them. When
+routing does choose, it writes the same `ModelOverride`/`ProviderOverride` pair those callers use,
+resolved to the actual call by `effectiveRunModelProvider` (`internal/agent/loop_pipeline_adapter.go`).
+Consequences worth knowing:
+
+- A routed turn leaves the `model_fallback` wrapper behind, exactly as every other override does
+  (see §Agent Model Fallback). Routing is not a reliability feature.
+- Reasoning effort is re-resolved for the routed provider+model pair
+  (`providers.ResolveReasoningDecision`), so an agent asking `high` on a tier whose model cannot
+  think degrades by its own fallback policy instead of sending an invalid option.
+- `ProviderOverride` is set only when the tier names a different provider. A tier that names no
+  provider stays on the agent's own.
+- Provider lookup is tenant-scoped (`Registry.GetForTenant(agent.TenantID, name)`, master fallback),
+  so one tenant's policy cannot point at another tenant's credentials. A name that does not resolve
+  logs a warning and keeps the agent's model.
+
+**Classifier (opt-in, costs a call).** Rules answer first; the classifier only runs when no rule
+matched. It sends one short prompt — the tier list with each `hint`, plus a bounded 1200-character
+preview of the turn — to the configured model, and expects a tier name or `BASELINE`. It is pinned
+to 24 output tokens with thinking off (a thinking-capable model otherwise spends the whole budget on
+reasoning and the answer truncates), goes through the usage-cap preflight with
+`Purpose: "model-routing"` and the agent's own window/max-tokens, and is cached per Loop keyed by
+run kind + message + the tier list and its hints, so editing the policy cannot serve a stale
+answer. Every failure path returns "route nothing": timeout, unparseable answer, unknown tier name,
+unresolvable provider, usage-cap refusal. A failing classifier is paused for a minute rather than
+cached as a baseline — a blip must not suppress routing for ten minutes, and a permanently broken
+one must not add `timeout_ms` to every turn.
+
+The turn text is sent to the classifier's provider. If that is a different vendor from the agent's,
+that vendor sees the request. The panel says so on the field.
+
+**Observability.** Three layers, no new table:
+
+1. **Per turn** — one `slog.Info("model_routing: decision", …)` line naming tier, from/to, source
+  (`rules` or `classifier`), the reason (the condition that fired) and the signal values; plus a
+  `model_route:<tier>` tag on the trace record, which is why routing is decided before the trace is
+  created.
+2. **Per cost** — usage events already record the model that actually ran
+  (`event.Model = result.Model`), so routed spend shows up in the existing usage dashboard.
+3. **Per agent, live** — `WS agents.routingStats {agentId}` returns the cached loop's counters:
+  `decisions`, `changes`, `noMatch`, `providerMisses`, `byTier`, and the classifier's
+  `classifierCalls` / `classifierCacheHits` / `classifierFailures`, with `windowStart` marking when
+  the agent was resolved. The routing card shows these because the three cases that look identical
+  from outside are not: a policy that is saved but has not run yet (editing an agent drops the
+  cached loop, so `cached: false`), a policy whose thresholds are too high (`noMatch` climbs,
+  `changes` stays 0), and a policy that fires but routes to the model the agent already has.
+  These are process counters by design — they reset on `agents.update` and on router TTL expiry,
+  because the question they answer ("did my edit change anything?") only lives for the next few
+  minutes of tuning, and per-turn DB writes are a bad price for it. Tenant scoping is the store
+  lookup: a caller who cannot read the agent cannot read its counters.
+
+**Editing and validation.** Web panel: Agents → agent → Advanced → *Model routing*, which splices
+the key into `other_config` read-modify-write (the WS/HTTP handlers replace the whole column, so
+`delivery_behavior` and friends survive only by chaining). Both save paths gate the payload through
+`store.ValidateModelRouting`, which refuses a policy that would parse but match nothing: `enabled`
+with no tier that names a model, more than 8 tiers, a non-numeric threshold, or a classifier
+without a model. The read path stays tolerant by design — a stored policy that cannot work is
+ignored at run time, never fatal. Note `agents.create` does not validate `other_config` at all
+(pre-existing for every key), so a bad blob created there is first refused when someone edits it.
+
+---
+
 ## Usage Cap Pricing Enforcement
 
 Standard edition can enforce AI budget caps before billable provider dispatch. API-key providers use OpenRouter `/models` pricing as the catalog source, with optional tenant/provider/model overrides in the dashboard. The gateway syncs the OpenRouter catalog automatically at startup and then once per day; the dashboard sync action remains available for manual refresh.
@@ -798,7 +893,7 @@ GoClaw v3 Wave 2 adds composable request middleware, error classification, per-m
 
 **Model Registry** — Thread-safe forward-compat resolver. Seeds Claude, GPT, Qwen models. Each spec: context window, max tokens, reasoning/vision flags, per-1M cost. Unknown models → provider's `ForwardCompatResolver` (caches hit). Template cloning with patch overrides.
 
-**Embedding Providers** — OpenAI (text-embedding-3-small, 1536 dims, batch 2048) and Voyage AI (1024 dims, batch 1024) via `store.EmbeddingProvider`. Used by vault and episodic memory. All vectors normalized to 1536 for pgvector column.
+**Embedding Providers** — OpenAI (text-embedding-3-small, 1536 dims, batch 2048) and Voyage AI (1024 dims, batch 1024) via `store.EmbeddingProvider`. Used by vault and episodic memory. The stored width is whatever this database's `vector(N)` columns declare (fresh migrations create `vector(1536)`); a provider whose configured width differs makes startup refuse, and `goclaw migrate embed-dims --to N` re-dimensions every vector column and its HNSW indexes.
 
 ---
 
@@ -810,6 +905,8 @@ GoClaw v3 Wave 2 adds composable request middleware, error classification, per-m
 | Resilience middleware | `internal/providers/` | `middleware*.go`, `error_classify.go`, `cooldown.go`, `failover.go` — request middleware, error classification, 2-tier failover |
 | Provider interface & types | `internal/providers/types.go` | `Provider` interface, `ChatRequest`, `ChatResponse`, `Message`, `ToolCall`, `Usage` |
 | Gateway wiring | `cmd/gateway_providers.go` | Provider registration from config and database at startup |
+| Per-turn model routing | `internal/agent/model_routing.go`, `internal/agent/model_routing_llm.go` | Tier rules + optional classifier; writes `RunRequest.ModelOverride`/`ProviderOverride` first thing in `Loop.Run` (`loop_run.go:27`) |
+| Routing config contract | `internal/store/agent_model_routing.go` | `other_config.model_routing` types, tolerant reader (`FindModelRoutingConfig`), strict write-side gate (`ValidateModelRouting`) |
 
 Use `grep` or your editor's symbol search for specific files.
 

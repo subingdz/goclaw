@@ -329,6 +329,29 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `PUT` | `/v1/skills/{id}/tenant-config` | Set tenant-level skill config |
 | `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
+### Community Skill Sources
+
+Off unless `skills.registries.<source>.enabled` is true in config (ClawHub and a Git host are the
+two built-in sources). Reads are admin + master scope; install additionally requires an owner.
+Each source is contacted with a 45s budget, and a disabled feature answers `503` rather than
+`404`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills/registry/sources` | Which sources are enabled, and which answer keyword queries |
+| `GET` | `/v1/skills/registry/search` | Keyword search across enabled sources (`q` required, `source`, `limit` ≤ 50) |
+| `POST` | `/v1/skills/registry/inspect` | Download and analyse one bundle; writes nothing |
+| `POST` | `/v1/skills/registry/install` | Re-analyse and install into the tenant `skills-store` |
+
+`inspect` returns `analysis` (files, bytes, executables, declared and missing deps, guard findings,
+`unsafe`, `suspicious`) plus a `skill_md` preview, so the human approving an install sees what the
+installer will enforce. `unsafe: true` is a successful response, not an error — `install` is where
+it becomes a `403`. A bundle whose paths fail validation is `422`; a source that flagged the
+content is `403`; every source failing a search is `502`.
+
+Installs create **no grants** and run **no dependency installs**: a registry skill arrives
+`active` but ungranted, or `archived` while a declared binary or package is missing on this host.
+
 ### Skill Self-Evolution
 
 Skill self-evolution is tenant-scoped and off by default per skill. Usage
@@ -445,7 +468,9 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | `GET` | `/v1/providers/{id}/models` | List models plus any known reasoning capability metadata |
 | `POST` | `/v1/providers/{id}/verify-embedding` | Verify embedding model configuration |
 | `GET` | `/v1/providers/{id}/codex-pool-activity` | Provider-level Codex pool activity |
-| `GET` | `/v1/embedding/status` | Check global embedding availability |
+| `GET` | `/v1/embedding/status` | Check global embedding availability, plus the live `schema_dimensions` and `max_indexable_dimensions` |
+| `GET` | `/v1/embedding/schema` | Every pgvector column: width, stored-row count, covering HNSW indexes (master scope) |
+| `POST` | `/v1/embedding/dimensions` | Re-dimension all vector columns. Body `{to, dry_run, force, confirm}`; `confirm` must equal `to` as text, `force` is required when rows already hold vectors, and a `dry_run` is returned as the same report without touching anything (master scope, Admin). Same code path as `goclaw migrate embed-dims` |
 | `GET` | `/v1/providers/claude-cli/auth-status` | Check Claude CLI login status |
 
 ### Model Pricing

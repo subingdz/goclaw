@@ -397,6 +397,13 @@ Sends a message to a user on a connected channel. **Standard edition only** — 
 
 `warning` is set to `"media_not_supported_fallback_text"` when `fallback_to_text=true` and media was dropped.
 
+**Remote URLs are not universal.** Channels whose own servers fetch the URL (telegram, discord,
+slack, feishu, whatsapp, zalo_personal, pancake, facebook) accept `media_url` directly. **`qq` and
+`weixin` upload from bytes on disk** — their platforms take the file body rather than a link — so a
+remote `media_url` is refused *inside* those adapters. The call still returns 200 because the text
+part was delivered, and the chat gets `[附件发送失败: <name>]`; use `fallback_to_text=true` if you
+need the API to be the one reporting it, or deliver a path the gateway can read.
+
 ### Error Responses
 
 | Status | Code | When |

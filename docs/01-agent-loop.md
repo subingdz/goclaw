@@ -33,6 +33,9 @@ flowchart TD
 ### Stage Execution Order
 
 ```
+Run entry (before the pipeline)
+├─ routeModel: pick this turn's model+provider from other_config.model_routing
+│
 Setup (runs once)
 ├─ ContextStage: Inject context, compute workspace, ensure per-user files
 │
@@ -242,6 +245,7 @@ flowchart TD
 ### Phase 1: Setup
 
 - Increment the `activeRuns` atomic counter (no mutex -- true concurrency, especially in group chats with `maxConcurrent = 3`).
+- **Per-turn model routing** (`l.routeModel`, `internal/agent/model_routing.go`): the first thing that reads the request, so the trace record, the budget pre-estimate and the pipeline all see the chosen model. A caller-supplied `ModelOverride` (cron, heartbeat, webhook, subagent) short-circuits it; otherwise the agent's `other_config.model_routing` tiers are walked in order and the first match sets `ModelOverride`/`ProviderOverride`. See `docs/02-providers.md` §Per-Turn Model Routing.
 - Emit a `run.started` event to notify connected clients.
 - Create a trace record with a generated trace UUID.
 - Propagate context values: `WithAgentID()`, `WithUserID()`, `WithAgentType()`. Downstream tools and interceptors rely on these.

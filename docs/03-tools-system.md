@@ -156,10 +156,46 @@ Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand
 
 | Tool | Description |
 |---|---|
-| `create_image` | Generate images from text (OpenAI, Gemini, MiniMax, DashScope, BytePlus) |
+| `create_image` | Generate images from text (OpenAI, Gemini, MiniMax, DashScope, BytePlus, and any OpenAI-compatible gateway — Zhipu CogView, SiliconFlow, Bailian-compatible) |
 | `create_audio` | Generate audio/music/sound effects (MiniMax, ElevenLabs) |
 | `create_video` | Generate video from text/image (MiniMax, Gemini, BytePlus) |
 | `tts` | Text-to-speech synthesis (OpenAI, ElevenLabs, Edge, MiniMax) |
+
+#### create_image response shapes and vendor parameters
+
+Image providers clone the OpenAI **request** (`POST {base_url}/images/generations`) and then answer
+in their own **response** shape, so `internal/tools/create_image_response.go` reads all of them:
+`data[].b64_json` (OpenAI, MiniMax), `data[].url` (Zhipu CogView, Alibaba Bailian, Volcengine Ark,
+302.AI), `data` typed as an array of plain strings (the way Zhipu's own parameter table types it),
+`images[].url` with a `kind` of `generated`/`original` (SiliconFlow), and a `data:image/...;base64,`
+value arriving in either field. A URL is **downloaded gateway-side**, which is not optional
+housekeeping: those links expire (24 hours at Bailian and 302.AI, 30 days for CogView) and the
+workspace copy under `{workspace}/generated/YYYY-MM-DD/` is the only durable artifact. The fetch
+reuses the SSRF posture of the reference-image path — validate, pin the resolved IP, and follow a
+redirect only while it stays on the same host, so a hostile `base_url` cannot turn the gateway into
+a metadata-endpoint reader; the payload is capped at 20 MB.
+
+The request body keeps the OpenAI keys (`model`, `prompt`, `n`, `response_format`) and forwards a
+narrow whitelist of vendor parameters from the chain entry's `params`:
+`size`, `quality` (OpenAI / Zhipu) and `image_size`, `num_inference_steps`, `guidance_scale`, `sfw`
+(SiliconFlow). Anything else stays out because an unknown field is enough for a strict gateway to
+answer 400. `response_format` defaults to `b64_json` **except** for the `gpt-image*` /
+`chatgpt-image*` families, which reject the parameter outright (Azure's own reference says the
+series does not support it and always returns base64) — GoClaw's default OpenAI image model is one
+of them, so the unconfigured stock path used to answer `400 Unknown parameter: 'response_format'`.
+The panel field can force `b64_json`, `url`, or omission for any model, and the tolerant reader
+means `url` is a usable answer everywhere. The JSON image-to-image path drops the field for the
+same reason. The panel exposes these three fields under **Built-in Tools → create_image → chain
+entry → Settings** for any provider registered as `openai_compat`.
+
+Chain resolution gained one behavior: `imageGenProviderPriority` ends with the `chainWildcard`
+sentinel, so after the known vendors GoClaw also tries **every other registered provider that
+exposes an API key**, using its own default model when the chain entry names none. That is what
+makes "I added a Zhipu provider in the panel" work without also editing this tool's chain. Two
+deliberate limits: OAuth/Codex credentials are a person's subscription and are never auto-tried,
+and a provider with no default model is skipped rather than sent an empty `model`. Tools whose
+priority list omits the sentinel (`create_video`, the `read_*` tools) keep their closed vendor
+lists.
 
 ### Media Reading
 
@@ -190,6 +226,18 @@ ID and staged-input root. Bridge tools therefore apply the same read-only
 | `use_skill` | Activate a skill (marker tool for observability) |
 | `publish_skill` | Register a skill directory in the database |
 | `skill_manage` | Manage skill lifecycle (admin operations) |
+| `skill_install` | Search a community source and install a skill after the human approves the analysis |
+
+`skill_install` is registered only when a community source is enabled in
+`skills.registries.*` (see `15-core-skills-system.md` §16) and only on the standard edition. It is
+a two-call protocol: `inspect` records a proposal for the conversation and returns the analysis for
+the agent to relay; `install` refuses without a fresh, unconsumed proposal for the same
+source+slug+version, and refuses outright when the content guard reports a finding. The turn must
+be a direct human conversation — cron, heartbeat, subagent and team-task runs are refused, as are
+non-owner actors and non-master tenants. What this does **not** do is prove the human said yes: no
+tool in GoClaw can observe a reply that has not arrived yet, so approval is relayed by the agent.
+The containment is that an install grants nothing, installs no dependencies, and writes only into
+the caller's own tenant skills-store.
 
 ---
 

@@ -138,6 +138,8 @@ Native `image_generation` support in the Codex provider (`POST /codex/responses`
 
 **Web UI:** Download filename resolver (`imageGenDownloadName`) in `ui/web/src/components/chat/media-gallery.tsx`. Image generation works automatically when the agent has the `create_image` tool — no user-facing toggle.
 
+**Not this path:** the `create_image` **tool** talks to vendor HTTP endpoints directly and is documented in [03-tools-system.md](./03-tools-system.md) → "create_image response shapes and vendor parameters". It answers with either base64 or an expiring URL depending on the vendor (OpenAI vs Zhipu CogView vs SiliconFlow), which is why its response reader is shape-tolerant rather than per-vendor.
+
 ## Webhook Subsystem
 
 External systems invoke agents or send channel messages via webhooks without gateway tokens.

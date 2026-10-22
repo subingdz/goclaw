@@ -536,6 +536,7 @@ V3 introduces a **pluggable 8-stage pipeline** (replacing the monolithic `runLoo
 | Retrieval | `v3_retrieval_enabled` | bool | false | Enable Knowledge Vault with wikilinks + hybrid search, L0 auto-injection |
 | Evolution Metrics | `self_evolution_metrics` | bool | false | Track agent metrics for evolution suggestions (tool usage, retrieval patterns) |
 | Evolution Suggestions | `self_evolution_suggestions` | bool | false | Generate and apply evolution suggestions (auto-adapt prompt/tools) |
+| Model Routing (object, not a flag) | `model_routing` | object | absent | Pick a different model per turn before the call; ordered tiers, first match wins. See `docs/02-providers.md` §Per-Turn Model Routing |
 
 ### Memory Consolidation System
 

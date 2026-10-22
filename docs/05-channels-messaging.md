@@ -168,9 +168,9 @@ Every channel must implement the base interface:
 | `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
-| `ActivityIndicatorChannel` | Ephemeral "agent is working" indicator | Bitrix24 |
-| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo Bot, Zalo Personal |
-| `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo Bot, Zalo Personal |
+| `ActivityIndicatorChannel` | Ephemeral "agent is working" indicator | Bitrix24, WeChat |
+| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, QQ, Slack, Zalo Bot, Zalo Personal |
+| `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, QQ, Slack, Telegram, WhatsApp, Zalo Bot, Zalo Personal |
 | `ReasoningDeliveryChannel` | Override channel-visible reasoning delivery | Telegram |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
@@ -196,6 +196,11 @@ into the portal's leaky bucket, so real message sends are never starved).
 
 **Bitrix24** implements it via `imbot.v2.Chat.InputAction.notify` (status codes
 `IMBOT_AGENT_ACTION_*`). Toggle per channel with `activity_indicator` (default on).
+
+**WeChat** implements it through iLink's `sendtyping`, which first needs a per-peer
+`typing_ticket` from `getconfig`; tickets are cached for 24 h, the indicator is cancelled once
+the reply has been delivered, and a peer whose ticket cannot be fetched simply shows no
+indicator rather than failing the run.
 
 ### Webhook Mount
 
@@ -257,22 +262,22 @@ flowchart TD
 
 ## 4. Channel Comparison
 
-| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo Bot | Zalo Personal | Bitrix24 |
-|---------|----------|-------------|---------|-------|----------|---------|---------------|----------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Long polling (REST) |
-| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes |
-| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Files (20 MB default) |
-| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
-| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
-| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- |
+| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo Bot | Zalo Personal | Bitrix24 | QQ | WeChat |
+|---------|----------|-------------|---------|-------|----------|---------|---------------|----------|-----|--------|
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Long polling (REST) | WebSocket (outbound only) | Long polling (outbound only) |
+| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes | Yes | Yes (replies only — cannot open a conversation) |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes | Yes (mention gating) | No (reply reference is per peer) |
+| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- | -- | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars | Configurable (default 1,500; QQ publishes no limit) | Configurable (default 4,000; iLink publishes no limit) |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | No | No | Typing indicator |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Files (20 MB default) | Inbound yes (20 MB cap, SSRF + redirect-hop checked); outbound yes — base64 `file_data` upload + `msg_type=7`, voice renders as a voice bar. Local paths only, no remote `media_url` fetch | Inbound yes (encrypted CDN, host-pinned, 25 MB × 4, 45 s); outbound yes — `getuploadurl` slot + AES-ECB upload, image/video/file (voice travels as a file card). Local paths only |
+| Speech-to-text | Yes | Yes | Yes | -- | Yes (opt-in) | -- | -- | -- | Yes (needs a SILK decoder on the host) | Yes — iLink's own `voice_item.text` first, GoClaw's ASR chain only when it is absent (also needs the host SILK decoder) |
+| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text | Plain text (markdown msg_type not wired yet) | Plain text |
+| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes (separate C2C and per-group identities) | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- | -- | -- |
 
 ---
 
@@ -351,7 +356,14 @@ The tool allow list is passed via message metadata and applied by the policy eng
 
 ### Voice Message Transcription (STT)
 
-Voice and audio messages are transcribed through a unified `audio.Manager` interface. All channels (Telegram, Discord, Feishu, WhatsApp) route transcription requests through the same STT chain.
+Voice and audio messages are transcribed through a unified `audio.Manager` interface. Six
+channels route transcription through the same STT chain today — Telegram, Discord, Feishu,
+WhatsApp (opt-in), QQ and WeChat — and each of them must first download the audio, because every
+provider uploads a file rather than handing the engine a URL. Slack, Bitrix24, Facebook, Pancake,
+both Zalo adapters and the webchat/WS upload path download or classify audio and tag it but never
+transcribe. QQ and WeChat voice is SILK, so those two additionally need a host-installed decoder
+(see below); WeChat uses iLink's own `voice_item.text` whenever it is present and spends an ASR
+call only when it is not.
 
 #### Unified STT Flow
 
@@ -365,10 +377,11 @@ flowchart TD
     WHATSAPP_CHECK -->|No| WA_FALLBACK["[Voice message]<br/>(default opt-out)"]
     WHATSAPP_CHECK -->|Yes| DOWNLOAD
     
-    DOWNLOAD --> STT_CHECK{"STT providers<br/>configured?"}
-    STT_CHECK -->|Yes| STT_CHAIN["Try providers in order:<br/>elevenlabs, proxy"]
-    STT_CHECK -->|No| LEGACY{"Legacy bridge<br/>providers?"}
-    
+    DOWNLOAD --> STT_CHECK{"channel override<br/>registered?"}
+    STT_CHECK -->|Yes| CHAIN_PROXY["proxy:&lt;platform&gt;<br/>(legacy per-channel proxy)"]
+    STT_CHECK -->|No| CFG_CHECK{"audio.stt.provider<br/>set?"}
+    CFG_CHECK -->|Yes| STT_CHAIN["primary then fallback<br/>from audio.stt"]
+    CFG_CHECK -->|No| LEGACY{"tts.openai_compat.api_base<br/>or ElevenLabs key?"}
     LEGACY -->|Yes| STT_CHAIN
     LEGACY -->|No| FALLBACK["[Voice message]"]
     
@@ -388,15 +401,47 @@ flowchart TD
 
 #### Configuration & Decision Rules
 
-**Decision 2 (Conflict rule):** When `builtin_tools[stt].settings.providers[]` is present in the database, it OVERRIDES all legacy channel-specific STT configs. The legacy STT bridge (`STTProxyURL` → `proxy` provider) only activates when the providers list is empty or missing.
+**Resolution order** (`internal/audio/manager_stt.go`): (1) a provider registered for the calling
+channel — the legacy `channels.<x>.stt_proxy_url` bridge registers `proxy:telegram`, `proxy:feishu`
+and `proxy:discord`, which is reached because those channels put their platform name in the context
+with `audio.WithChannel`; (2) the chain built from `audio.stt`; (3) `elevenlabs → proxy`, filtered
+to what actually registered. Unregistered names are dropped at resolution rather than walked and
+warned about on every voice message.
 
-| Setting | Behavior |
-|---------|----------|
-| `providers: ["elevenlabs", "proxy"]` | Try ElevenLabs Scribe first; fall back to legacy proxy |
-| `providers: []` (empty) | Skip all STT; voice → `[Voice message]` fallback |
-| `providers` missing (nil) | Check for legacy bridge at startup; activate if `STTProxyURL` exists |
+| Config | Effect |
+|--------|--------|
+| `audio.stt.provider` set | That provider — plus optional `audio.stt.fallback` — is the chain. The TTS-derived sources are not consulted. |
+| provider empty, `tts.openai_compat.api_base` or an ElevenLabs TTS key present | Historical behavior preserved: that endpoint becomes the chain |
+| neither | `STTAvailable(ctx)` is false; channels leave the voice untranscribed and log at Debug instead of failing per message |
+| `audio.stt.timeout_ms` | Per-call deadline for one transcription (`Manager.STTTimeout(fallback)`). Unset keeps each channel's own default (10 s today). QQ and WeChat wrap their whole media step in a wider budget, and that outer bound still wins. |
+| `audio.stt.silk_decoder` | Pins the SILK binary outside `PATH`; `off` stops the search. Seeded into `system_configs` like the rest of the STT keys. |
+| `channels.<x>.stt_proxy_url` | A proxy scoped to that platform, tried before the global chain for it (deprecated, warns once) |
 
-**Decision 6 (WhatsApp opt-in):** WhatsApp voice message STT is **OFF by default** (`whatsapp_enabled: false`). Rationale: WhatsApp voice messages are end-to-end encrypted; sending audio to an external STT provider breaks E2E encryption. Admins must explicitly toggle STT in the UI at **Config → Audio → STT** and acknowledge the E2E breaking change.
+`provider` names a protocol, not a vendor: `openai_compat` covers SiliconFlow, a self-hosted
+whisper server and OpenAI itself, and the service is chosen by `base_url`. Supported values are
+`openai_compat`, `elevenlabs`, `proxy`; anything else registers nothing and says so at startup.
+`model` is sent to the primary only — a fallback keeps its own default, because one engine's model
+id means nothing to another. The `proxy` protocol is a file in and a `{"transcript": …}` out: it has
+no field for a model or a language hint, so choosing `proxy` with those set logs it at Debug rather
+than pretending the hint was applied. `api_key` is stored in the encrypted `config_secrets` table
+(masked in `config.get`, never written to config.json) and `GOCLAW_AUDIO_STT_API_KEY` overrides it.
+
+**Where it is edited.** Web: **Config → Integrations → Speech-to-Text**
+(`ui/web/src/pages/config/sections/stt-section.tsx`). Desktop: **Built-in tools → stt → Settings**,
+which patches `audio.stt` over the same WS methods the web panel uses
+(`ui/desktop/frontend/src/hooks/use-stt-config.ts`) — there is no Integrations screen in the
+desktop build, and channels do run there, so this is its only STT surface.
+
+`builtin_tools[stt].settings` carries exactly one flag the chain consults: `whatsapp_enabled`.
+Both dialogs used to offer a provider list, an ElevenLabs key and a proxy URL in that blob, which
+nothing ever read — a configured-looking form that changed nothing, including a voice message that
+never got transcribed. Those fields are gone: the web dialog is the WhatsApp opt-in plus a pointer
+to the real card, and the desktop dialog is the real `audio.stt` editor.
+
+**Restart:** the audio Manager is built during startup, before any channel starts, so a change to
+STT config takes effect on restart.
+
+**Decision 6 (WhatsApp opt-in):** WhatsApp voice message STT is **OFF by default** (`whatsapp_enabled: false`). Rationale: WhatsApp voice messages are end-to-end encrypted; sending audio to an external STT provider breaks E2E encryption. Admins must explicitly toggle it in the UI at **Builtin tools → stt → WhatsApp voice transcription** and acknowledge the E2E breaking change. This opt-in is the one STT setting still read from `builtin_tools[stt]`, and it stays deliberately conservative: WhatsApp is the only channel where transcribing voice weakens a platform guarantee.
 
 When disabled (default):
 - Voice messages surface in agent context as `[Voice message]` (localized via i18n key `channel.voice_message_fallback`)
@@ -411,18 +456,29 @@ When enabled:
 | Channel | STT Support | Notes |
 |---------|:-:|---------|
 | **Telegram** | Yes | Uses unified chain; preserves Telegram voice MIME; legacy proxy override is keyed by platform type `telegram`; voice routing via `VoiceAgentID` config |
-| **Discord** | Yes | Standard flow; no special routing |
-| **Feishu** | Yes | Standard flow; no special routing |
-| **WhatsApp** | Yes (opt-in) | Requires explicit admin approval; default OFF |
+| **Discord** | Yes | Standard flow; the download comes from Discord's CDN, which is trusted rather than SSRF-screened |
+| **Feishu** | Yes | Standard flow; audio arrives as opus and is saved to a temp file |
+| **WhatsApp** | Yes (opt-in) | Requires explicit admin approval; default OFF (E2E trade-off) |
+| **Slack** | No | Downloads audio and tags `<media:audio>`; nothing calls `Transcribe` |
+| **Zalo (OA)** | No | The wire parser has no audio field at all |
+| **Zalo (personal)** | No | Audio is classified by MIME and downloaded (SSRF-checked), but not transcribed |
+| **Bitrix24** | No | Downloads portal files and tags them; no STT call |
+| QQ | Yes | Downloads attachments after the policy gates; voice transcribed if a SILK decoder exists on the host |
+| **WeChat** | Platform-side, with our own fallback | iLink's `voice_item.text` is used when present; when it is absent the SILK blob is fetched from the encrypted CDN and transcribed by the configured ASR chain, which needs a host SILK decoder like QQ voice does |
 
 #### Factory Integration
 
-All channel factories accept `audioMgr *audio.Manager`:
+Six factories take the `audio.Manager`; the rest of them do not, because they cannot transcribe:
 - Telegram: `FactoryWithStoresAndAudio(..., audioMgr)`
-- Discord: `FactoryWithAudio(..., audioMgr)`
+- Discord: `FactoryWithStoresAndAudio(..., audioMgr)`
 - Feishu: `FactoryWithStoresAndAudio(..., audioMgr)`
 - WhatsApp: `FactoryWithDBAudio(..., audioMgr, builtinToolStore)`
+- QQ: `qqchannel.FactoryWithAudio(audioMgr)`
+- WeChat: `weixinchannel.FactoryWithAudio(audioMgr)`
 
+`zalo`, `zalo/personal`, `slack`, `facebook`, `pancake` and `bitrix24` factories take no audio
+manager at all (registration list in `cmd/gateway.go:943-969`), which is the cheapest way to tell
+whether a channel can transcribe.
 WhatsApp additionally accepts `builtinToolStore store.BuiltinToolStore` to fetch the per-message `whatsapp_enabled` opt-in flag. Wiring is in `cmd/gateway_channels_setup.go` and `cmd/gateway.go`.
 
 ### Bot Commands
@@ -865,13 +921,196 @@ The bot app must have the `imbot` scope granted. The `disk` scope is **not** req
 
 ---
 
+## 17. QQ Official Bot
+
+`internal/channels/qq/` implements the QQ Open Platform bot API v2 over a single outbound
+websocket. No public IP, no callback port, no webhook mode.
+
+**Setup.** Create the bot on the QQ 开放平台 console, then add a channel instance of type
+`qq` in the web UI with App ID + App Secret. Two console switches decide what the bot can
+receive at all: message reception for C2C and group @ messages, and — separately —
+"接收所有消息" if plain group chatter should also be pushed. The intent subscribed by GoClaw
+is `GROUP_AND_C2C_EVENT` (1<<25), which carries both event families; the firehose is gated
+by the console, not by an intent bit.
+
+**Identity.** A person has a different identifier per scenario: `user_openid` in C2C and
+`member_openid` within a group. GoClaw namespaces the sender key (`c2c:…` / `member:…`) so a
+pairing recorded for one namespace can never be honoured as the other, and chat ids carry
+`c2c:` / `grp:` because the two send endpoints are chosen by scenario, not by anything
+readable in the id. Whether `member_openid` is stable across groups is not documented, so
+nothing assumes it is — a group member is treated as a per-group person.
+
+**Replies.** QQ accepts a passive reply only while the inbound `msg_id` is fresh and only a
+few times per message. The docs disagree on the window (the group page says 5 minutes / 5
+replies; the C2C page says both "60 minutes, 4 replies" and "msg_id valid 5 minutes" on the
+same page), so the conservative pair is implemented: 5 minutes, 4 replies. When QQ rejects a
+passive reply (`err_code` 40034128 / 40034005 / 304103 / 40034024) the text is resent as an
+active message, which is subject to its own quota — unverified bots get 5/s and 30/min,
+20/min per relationship, 1000/day per user or group. Success is judged by `err_code`, never
+by `message`, per the docs' own warning.
+
+**Inbound media (stage 2).** Each attachment's CDN URL is fetched — after the DM/group policy
+gates, so a stranger cannot make the gateway pull URLs — into a temp file, classified by
+`content_type` then by filename extension, and handed to the pipeline as a media tag. Voice goes
+through the STT chain like every other channel. The URL is attacker-influenced data, so it is
+SSRF-checked before the request **and at every redirect hop**, and the body is capped at 20 MB.
+An attachment that cannot be fetched is still announced (`[附件 N 个未能获取: …]`) rather than
+disappearing.
+
+SILK is the catch: QQ voice is usually `slk`/`silk`, which no transcription engine reads and no
+pure-Go decoder exists for. `internal/audio/silk.go` therefore shells out to a host-installed
+`silk_v3_decoder` or `silk_decoder`. **`ffmpeg` is last in that search order and is a dead end on
+this path**: ffmpeg cannot decode SILK, and the decoder is only invoked for a payload that actually
+sniffs as SILK (`prepareSTTInput` gates on the `#!SILK_V3` magic), so the "it might rescue a
+mislabeled AMR" role its comment claims never happens — on a host that has only ffmpeg, startup
+announces *decoder available* and then fails every voice note. Install a real silk decoder; nothing
+else works. With no decoder installed the message still reaches the agent — as an undecoded voice
+file — which is the honest outcome of a missing external tool rather than a silent drop. Set
+`audio.stt.silk_decoder` to pin a binary outside PATH, or `off` to stop the search.
+
+**Outbound media (rich media upload).** `POST /v2/{users|groups}/{id}/files` accepts the bytes
+directly (`file_data`, base64), so a gateway with no public address can still send attachments —
+the note in earlier revisions of this file and of the docs, saying a QQ-fetchable `url` was
+required, described the older endpoint contract and is corrected here. The flow is: upload with
+`srv_send_msg=false` → `file_info` (+ `ttl`) → one `msg_type=7` message per attachment. Media goes
+*out after* the text so the small passive-reply budget is spent answering the human first, and the
+isolation rule still holds — a file uploaded through the group endpoint can only be sent to that
+group, and vice versa for C2C.
+
+`file_type` is 1 image / 2 video / 3 voice / 4 file. Only the formats QQ renders as a card are
+claimed as such (jpg/png/gif/webp/bmp; mp4; and **silk, mp3, wav or ogg for voice**, which is what
+lets a TTS reply arrive as a playable voice bar rather than an attachment to open); anything else
+is sent deliberately as a file instead of risking an `850019` unsupported-format rejection. The
+per-file ceiling here is 20 MB — the same as QQ's soft limit — because a base64 body means holding
+the whole file in memory twice, and QQ's 200 MB hard ceiling is not a reason to do that to a
+2 GB board. A failed attachment is announced (`[附件发送失败: …]`) rather than vanishing, and a
+message whose text was empty and whose attachments all failed returns an error.
+
+The field is sent as `media.file_info`. The docs' prose says `file_info` while a rendered example
+on the send page spells it `fileinfo`; every other field on these endpoints is snake_case, so
+snake_case is what is implemented. A `22006` ("消息类型与内容不匹配") on a media send means that
+reading is wrong — not that the upload failed.
+
+**TTS.** `tts.auto` applies on this channel too: a reply that should be spoken becomes a
+`file_type=3` voice message through the path above, and the `[[tts]]` markers are stripped whether
+or not audio was produced. A channel that never called the helper delivered those markers to the
+user verbatim.
+
+**Resilience.** Heartbeat interval arrives in the hello frame in milliseconds; a missing ACK
+for two beats is treated as a dead socket. Close codes are classified: 4914/4915 (bot
+delisted or banned) and 4013/4014 (intent missing or not approved) stop the reconnect loop
+and surface the console action in the channel health detail, because retrying cannot fix
+them; 4009 resumes with the stored session id and sequence, 4006/4007 identify fresh.
+Inbound events are deduplicated by event id, since the docs state the same `msg_id` may be
+pushed more than once.
+
+---
+
+## 18. WeChat (personal account, iLink)
+
+`internal/channels/weixin/` talks to Tencent's official iLink (智联) bot API for a **personal**
+WeChat account — `https://ilinkai.weixin.qq.com`, HTTP/JSON, long-polling `getupdates`, so no
+public callback URL is required. This is the route chosen over 企业微信 and 公众号; the
+grey-market protocols were not considered.
+
+**Activation.** Add a channel instance of type `weixin` in the web UI; the wizard's auth step
+asks iLink for a QR code, renders it as PNG, and polls the scan state, showing the peer that the
+code was scanned before confirmation. On success the `bot_token`, `ilink_bot_id` and
+`ilink_user_id` are written onto `channel_instances.credentials` (encrypted at rest) and the
+instance is hot-loaded. A created-but-unscanned instance is a normal state: the factory returns
+no channel and health reports missing credentials rather than a runtime failure. Activation can
+also be driven over WS directly (`weixin.qr.start`, see [19-websocket-rpc.md](./19-websocket-rpc.md)).
+
+A token is bound to one session, so re-scanning replaces the previous login; the reference
+implementation documents the same constraint. A `-14` reply means that session is dead: the
+channel parks itself for an hour instead of hammering an endpoint that will keep refusing it —
+which is also how an account avoids attracting attention.
+
+**The protocol's central limitation.** A reply must carry the `context_token` taken from the
+message it answers, and that reference is only ever produced by an inbound (and goes stale after
+roughly a day of peer inactivity). An iLink bot therefore **cannot start a conversation**: cron
+reminders, heartbeat output and approval pushes have no address to send to. `Send` returns an
+error naming that reason instead of dropping the text quietly, and the outbound dispatcher logs
+the undeliverable message. Groups are out of scope for the same shape of reason — the reply
+reference is per peer — and inbound group messages are dropped on receipt.
+
+**State is files, not the database.** The poll cursor and the per-peer reply tokens live under
+`state_dir` (default `~/.goclaw/data/channels/weixin/<kind>/<accountKey>.json`), written
+atomically and keyed by `sha256(base_url|token)` so two weixin instances on one gateway can never
+read each other's cursor. `state_dir` exists for disk-constrained or containerized deployments
+that must point this elsewhere.
+
+**Inbound media goes through the encrypted CDN.** Image, file, video and voice items are
+downloaded, AES-ECB decrypted with the per-message key, and handed to the pipeline as ordinary
+attachments. The placeholder is dropped for an item that was fetched and kept for one that was
+not, so an agent is never told "nothing arrived" about a photo it can see, nor given silence
+about one it cannot. Voice is the interesting case: iLink's own `voice_item.text` is used when it
+is present (free, and already correct), and when it is missing the SILK blob is fetched and run
+through GoClaw's ASR chain — which needs a host SILK decoder, exactly as QQ voice does. At most
+four attachments per message and 25 MB per object are fetched, and the whole step is bounded to
+45 s because long-polling is sequential and a slow CDN must not delay every other peer. Keys
+arrive in three shapes (`aes_key` raw-16 base64, the same base64 of a 32-character hex string,
+and `image_item.aeskey` in hex); an item whose advertised key cannot be parsed is left as a
+placeholder rather than guessed at, and an item with no key at all is only accepted when its
+bytes really sniff as the type it claims.
+
+**Outbound media is the same CDN, in reverse.** The sequence is `POST ilink/bot/getuploadurl`
+with a key *we* generate (hex, 16 bytes) and the size of the **padded ciphertext** rather than the
+file, then POST the AES-ECB body to the slot that comes back, then reference it. The download
+parameter does not arrive in the JSON — it is the `X-Encrypted-Param` **response header**, and a
+first implementation that reads the body instead gets an upload that no message can cite. The
+message then carries `media.encrypt_query_param` plus `aes_key` as base64 *of the hex string*,
+which is the doubled shape inbound media already parses, so the two directions are asserted
+against each other in tests rather than assumed. A slot is answered as
+`{cdn_base_url}/upload?encrypted_query_param=…&filekey=…`, or as `upload_full_url` when the
+service supplies one — and that absolute answer is host-pinned before anything is POSTed, exactly
+like a peer-supplied `full_url` on the way in. One upload and one `sendmessage` per file, after the
+text, under the same 45 s budget; 25 MB per object.
+
+Only image (1), video (2) and file (3) are sent. The upload enum declares VOICE=4, and **no
+implementation is known to use it**, so a TTS reply leaves as an mp3 file card: playable in the
+client, and an honest answer to "say that in voice" — a claimed voice bar would be a guess at a
+shape nobody has observed. `[[tts]]` markers are stripped whether or not audio was produced.
+Anything not recognisably an image or an mp4 also goes out as a file, which is the one category
+known to work for every format.
+
+Attachments are local paths only: this adapter reads bytes from disk and does not fetch a remote
+`media_url` on the send path, unlike telegram/discord/slack which hand the URL to their own
+servers. That is a real divergence for `POST /v1/webhooks` callers on these two channel types, and
+a refused attachment is announced (`[附件发送失败: …]`) with a filename rather than a path. A reply
+made only of attachments that all failed returns an error.
+
+**The CDN host is pinned.** Both directions only ever contact `cdn_base_url` (default
+`https://novac2c.cdn.weixin.qq.com/c2c`, https except loopback); a peer-supplied `full_url` is
+honored only when it names that same host, otherwise the object is rebuilt from its
+`encrypted_query_param`, and redirects that leave the pinned host are refused after an SSRF check
+on every hop. A client that follows `full_url` verbatim turns "fetch the attachment" into "fetch
+whatever the peer names", which is how a metadata endpoint gets read — and the same argument
+applies to an `upload_full_url` handed back by a service response, which is where the upload URL
+comes from.
+
+**Host pinning.** During the scan, iLink may route an account to a different cell and hand back a
+`redirect_host`; that host comes from a remote response, so it is accepted only over https and
+only under `*.weixin.qq.com`. `base_url` and `proxy` are operator settings (the same trust level
+as every other channel's endpoint override) and are still scheme-pinned to http(s).
+
+**Resilience.** Long-poll timeout defaults to 35 s with headroom; three consecutive failures back
+off to 30 s. The cursor advances only after a batch has been handed to the bus, and a cursor file
+that cannot be parsed is reported rather than silently treated as "no cursor", because that
+mistake replays or skips a peer's history.
+
+---
+
 ## File Reference
 
 | Module | Path | Purpose |
 |---|---|---|
 | Channel core | `internal/channels/` | `Channel` interface, `BaseChannel` (incl. `HandleMessageMedia()` method), `Manager` (StartAll/StopAll), outbound dispatcher, DB instance loader |
-| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo,bitrix24}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo,bitrix24,qq,weixin}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| QR activation RPC | `internal/channels/whatsapp/qr_methods.go`, `internal/channels/weixin/qr_methods.go`, `internal/channels/zalo/personal/zalomethods/qr.go` | Scan-to-activate flows that write credentials onto a channel instance |
 | Bitrix24 media | `internal/channels/bitrix24/download.go`, `send_media.go` | Inbound file download via `imbot.v2.File.download`, outbound upload via `imbot.v2.File.upload` |
+| QQ media | `internal/channels/qq/media.go`, `media_send.go` | Inbound CDN download + STT, outbound base64 `files` upload and `msg_type=7` sends |
+| WeChat media | `internal/channels/weixin/media.go`, `media_out.go` | Encrypted-CDN download/decrypt, and the reverse: `getuploadurl` slot, AES-ECB upload, signed reference |
 | Audio / STT | `internal/audio/` | Audio manager, STT chain resolution, legacy STT bridge |
 | Pairing & routing | `internal/store/pg/pairing.go`, `cmd/gateway_consumer.go` | Pairing code persistence, inbound message routing and cancel interception |
 

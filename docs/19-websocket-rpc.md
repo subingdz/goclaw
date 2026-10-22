@@ -195,6 +195,30 @@ Update agent properties (admin only).
 **Request:** `{agentId, name?, model?, avatar?, tools_config?, ...}`
 **Response:** `{ok: true, agentId}`
 
+`other_config` is a **whole-column replace**, not a merge: a client that sends the blob without a
+key it does not care about deletes that key. Read the current value, splice, send back — which is
+what both panels do. Two payload families are validated before persisting: v3 booleans and
+`tts_params` (allow-list), and `model_routing` (an enabled policy with no tier that names a model,
+more than 8 tiers, a non-numeric threshold, or a classifier without a model is refused with
+`invalid_request`). `agents.create` performs none of these checks. See
+`docs/02-providers.md` §Per-Turn Model Routing.
+
+### `agents.routingStats`
+
+Read-only live counters for an agent's per-turn model routing. Never resolves an agent.
+
+**Request:** `{agentId}` (key or UUID)
+**Response:** `{agentId, hasPolicy, cached, provider, model, stats?}`
+
+`hasPolicy` comes from the stored `other_config`; `cached` from the router. After `agents.update`
+the cached loop is dropped, so a freshly saved policy answers `hasPolicy: true` with `cached: false`
+and no `stats` until the agent runs again — the two look identical as bare zeros, which is why both
+flags exist. `stats` carries `windowStart` (when the agent was resolved), `decisions`, `changes`,
+`noMatch`, `providerMisses`, `byTier`, and classifier `classifierCalls` / `classifierCacheHits` /
+`classifierFailures`. They are process counters and reset when the loop is re-resolved or the router
+TTL expires: a tuning window, not history. Tenant scoping is the store lookup — a caller who cannot
+read the agent cannot read its counters.
+
 ### `agents.delete`
 
 Delete an agent (admin only).
@@ -630,6 +654,41 @@ Admin-only. Invalidate tenant cache, forcing fresh fetch on next list.
 |--------|-------------|
 | `zalo.personal.qr.start` | Start Zalo QR code authentication |
 | `zalo.personal.contacts` | List Zalo personal contacts |
+
+---
+
+## 19.1 QR Activation (WhatsApp, WeChat)
+
+Both channels create the instance row first, then authenticate it against the existing
+instance id. The request only starts a session and ACKs; everything else arrives as
+client-scoped events on the same connection.
+
+| Method | Params | Description |
+|--------|--------|-------------|
+| `whatsapp.qr.start` | `{ "instance_id": "...", "force_reauth": false }` | Start a WhatsApp QR login session |
+| `weixin.qr.start` | `{ "instance_id": "..." }` | Start a WeChat (iLink) activation session |
+
+**`weixin.qr.*` events**
+
+| Event | Payload | Meaning |
+|-------|---------|---------|
+| `weixin.qr.code` | `{ instance_id, png_b64 }` | One code per activation; iLink never re-issues it |
+| `weixin.qr.status` | `{ instance_id, status }` | `status` is the protocol value `scaned` — the human is holding the phone |
+| `weixin.qr.done` | `{ instance_id, success, reason?, error?, ilink_bot_id? }` | Terminal state |
+
+`reason` is a stable code the panel localizes: `expired`, `timeout`, `network`, `error`.
+`error` carries raw detail only where the code cannot say enough (a refused redirect host,
+which endpoint stopped answering, a failed credentials write), so clients show it appended
+rather than instead.
+
+On success the token, `ilink_bot_id` and `ilink_user_id` are written onto
+`channel_instances.credentials` (encrypted at rest) and the instance is hot-loaded.
+Re-activating replaces the token: iLink binds a token to one session, so the previous one is
+already dead (`-14`) by the time anybody scans again, and the persisted poll cursor is keyed
+by credential, so it starts fresh.
+
+A `weixin.qr.start` for another tenant's `instance_id` returns `NOT_FOUND` — the lookup is
+scoped by the connection's tenant, not by the id alone.
 
 ---
 

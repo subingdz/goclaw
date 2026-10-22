@@ -454,3 +454,77 @@ PostgreSQL skills table
       └──► HTTP/WS API ──► UI (skills-page.tsx)
                                toggle, rescan, install deps
 ```
+
+## 16. Community Skill Sources
+
+A skill can arrive from disk, a ZIP upload, an import archive, or a community source. The last
+one is off unless config enables it:
+
+```json5
+{
+  skills: {
+    registries: {
+      clawhub: { enabled: true, base_url: "https://clawhub.ai", timeout_ms: 30000 },
+      github:  { enabled: true, api_base: "https://api.github.com" },   // owner/repo/path installs
+    },
+  },
+}
+```
+
+Tokens (`skills.registries.<source>.token`) live in `config_secrets` or
+`GOCLAW_SKILLS_CLAWHUB_TOKEN` / `GOCLAW_SKILLS_GITHUB_TOKEN`, never in config.json. Both sources
+are pinned to https (plain http only for loopback) and refuse a redirect that leaves the host, so
+a stored token cannot be handed to a host the source chooses.
+
+### Path from a search hit to a running skill
+
+```
+search ──► RegistrySummary (source's claim: name, summary, malware/suspicious flags)
+   │
+inspect ─► Fetch ─► Validate (paths, sizes, exactly one root SKILL.md)
+   │                └► Analyse: files, bytes, executables, declared deps,
+   │                   missing deps on this host, guard findings, SKILL.md preview
+   │                → temp dir removed; nothing written
+install ─► Fetch again ─► Validate ─► Analyse ─► refuse if any finding
+   │                └► collision checks: system slug / another user's slug → refuse
+   ▼
+dataDir/skills-store/<slug>/<version>/   +  .skill-origin.json
+   │
+skills row (visibility=internal, status=active|archived, frontmatter registry_*)
+   │
+   └──► grants are a separate decision: an install grants nothing
+```
+
+Three rules worth stating because they are what makes this different from a download button:
+
+1. **Analysis is re-run at install.** The panel's approve click does not carry a client-supplied
+   analysis; the installer downloads again and judges again.
+2. **A guard finding is a refusal, not a warning.** There is no force flag. `unsafe` content from
+   a community source is not the operator's to overrule through this path.
+3. **No dependency installs.** A skill that wants `pandoc` or `pip:requests` is registered
+   `archived` with the missing list, and becomes usable when an operator installs the dependency
+   through the existing dependency endpoints.
+
+### Provenance
+
+`.skill-origin.json` next to the files, plus `registry_source`, `registry_locator`,
+`registry_version`, `registry_sha256`, `registry_url`, and `registry_suspicious` on the DB row. The
+sidecar exists because export, import and a manual audit read the directory, not the database.
+
+`skills` has a `tags` column that no write path fills; provenance therefore travels in
+frontmatter, where `CreateSkillManaged` actually stores it.
+
+### Agent path
+
+`skill_install` gives an agent the same three steps, with the sequence enforced server-side:
+
+| Action | Effect |
+|---|---|
+| `search` | keyword fan-out over the enabled sources, per-source failures named |
+| `inspect` | download + analyse, record a 10-minute proposal for `(session, source, slug, version)`, return the analysis for the agent to relay |
+| `install` | refused without an unconsumed proposal; re-fetches and re-analyses, then writes the tenant `skills-store` |
+
+Refusals are not configurable: a turn without a human session (cron, heartbeat, subagent, team
+task), a non-owner actor, or a non-master tenant all stop before any outbound request. A content
+guard finding is never recorded as a proposal, so there is nothing to approve. One approval
+authorizes exactly one install, and the approval does not survive the TTL.
