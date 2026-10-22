@@ -488,6 +488,10 @@
     "whatsapp": {
       "createLabel": "생성 & QR 스캔",
       "formBanner": "생성 후 WhatsApp으로 QR 코드를 스캔하여 인증합니다."
+    },
+    "weixin": {
+      "createLabel": "생성 & QR 스캔",
+      "formBanner": "생성 후 스마트폰 WeChat으로 QR 코드를 스캔해 이 채널을 활성화합니다."
     }
   },
   "fallback": {
@@ -552,5 +556,27 @@
     "relinkDevice": "기기 재연결",
     "connectedSuccess": "✅ WhatsApp이 성공적으로 연결되었습니다!",
     "tabQrCode": "QR 코드"
+  },
+  "weixin": {
+    "initializing": "준비 중…",
+    "waitingForQr": "WeChat에 QR 코드를 요청하는 중…",
+    "scanHint": "스마트폰의 WeChat을 열고 이 코드를 스캔한 뒤 로그인을 확인하세요",
+    "scannedConfirm": "스캔됨 — 스마트폰 WeChat에서 로그인을 확인하세요",
+    "loginSuccessLoading": "✅ WeChat 활성화됨! 채널을 시작하는 중…",
+    "connectedSuccess": "✅ WeChat이 성공적으로 활성화되었습니다!",
+    "qrAlt": "WeChat 로그인 QR 코드",
+    "skip": "건너뛰기",
+    "retry": "재시도",
+    "close": "닫기",
+    "reauthTitle": "WeChat 활성화 — {{name}}",
+    "replaceTokenWarning": "새 코드를 스캔하면 현재 로그인이 대체됩니다. WeChat은 토큰을 하나의 세션에 묶으므로 이전 세션은 동작하지 않습니다.",
+    "qrReason": {
+      "expired": "QR 코드가 만료되었습니다. 재시도를 눌러 새 코드를 받으세요.",
+      "timeout": "스캔 확인이 시간 내에 이루어지지 않았습니다. 재시도로 새 코드를 받으세요.",
+      "network": "스캔을 기다리는 동안 WeChat에 접근할 수 없었습니다. 네트워크 또는 프록시를 확인한 후 재시도하세요.",
+      "error": "WeChat이 활성화 요청을 거부했습니다.",
+      "start": "QR 세션을 시작할 수 없습니다.",
+      "generic": "활성화에 실패했습니다."
+    }
   }
 }

@@ -387,6 +387,7 @@ func isWriteMethod(method string) bool {
 		// Channel pairing starts (QR scan flows).
 		protocol.MethodZaloPersonalQRStart,
 		protocol.MethodWhatsAppQRStart,
+		protocol.MethodWeixinQRStart,
 
 		// Workstations — connection test invokes SSH side-effects.
 		protocol.MethodWorkstationsTest,

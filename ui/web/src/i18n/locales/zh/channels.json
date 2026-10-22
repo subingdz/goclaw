@@ -726,6 +726,10 @@
     "whatsapp": {
       "createLabel": "创建并扫码",
       "formBanner": "创建后，请用 WhatsApp 扫描二维码完成认证。"
+    },
+    "weixin": {
+      "createLabel": "创建并扫码",
+      "formBanner": "创建后，用手机微信扫描二维码即可激活该渠道。"
     }
   },
   "fallback": {
@@ -790,6 +794,28 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "weixin": {
+    "initializing": "正在准备…",
+    "waitingForQr": "正在向微信申请二维码…",
+    "scanHint": "打开手机微信，扫描此二维码并在手机上确认登录",
+    "scannedConfirm": "已扫码，请在手机微信上确认登录",
+    "loginSuccessLoading": "✅ 微信已激活，正在启动渠道…",
+    "connectedSuccess": "✅ 微信激活成功！",
+    "qrAlt": "微信登录二维码",
+    "skip": "跳过",
+    "retry": "重试",
+    "close": "关闭",
+    "reauthTitle": "激活微信 — {{name}}",
+    "replaceTokenWarning": "重新扫码会替换当前登录：微信把令牌与单个会话绑定，旧会话将失效。",
+    "qrReason": {
+      "expired": "二维码已过期，请点击重试获取新的二维码。",
+      "timeout": "超时未确认扫码，请点击重试获取新的二维码。",
+      "network": "等待扫码期间无法访问微信接口，请检查网络或代理后重试。",
+      "error": "微信拒绝了激活请求。",
+      "start": "无法启动二维码会话。",
+      "generic": "激活失败。"
+    }
   },
   "bitrix24": {
     "portalSelect": {

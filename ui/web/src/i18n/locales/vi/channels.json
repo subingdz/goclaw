@@ -726,6 +726,10 @@
     "whatsapp": {
       "createLabel": "Tạo & Quét QR",
       "formBanner": "Sau khi tạo, quét mã QR bằng WhatsApp để xác thực."
+    },
+    "weixin": {
+      "createLabel": "Tạo & Quét QR",
+      "formBanner": "Sau khi tạo, quét mã QR bằng WeChat trên điện thoại để kích hoạt kênh này."
     }
   },
   "fallback": {
@@ -790,6 +794,28 @@
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
     "tabQrCode": "Mã QR"
+  },
+  "weixin": {
+    "initializing": "Đang chuẩn bị…",
+    "waitingForQr": "Đang yêu cầu mã QR từ WeChat…",
+    "scanHint": "Mở WeChat trên điện thoại, quét mã này rồi xác nhận đăng nhập",
+    "scannedConfirm": "Đã quét — hãy xác nhận đăng nhập trong WeChat trên điện thoại",
+    "loginSuccessLoading": "✅ WeChat đã kích hoạt! Đang khởi tạo kênh…",
+    "connectedSuccess": "✅ Kích hoạt WeChat thành công!",
+    "qrAlt": "Mã QR đăng nhập WeChat",
+    "skip": "Bỏ qua",
+    "retry": "Thử lại",
+    "close": "Đóng",
+    "reauthTitle": "Kích hoạt WeChat — {{name}}",
+    "replaceTokenWarning": "Quét mã mới sẽ thay thế đăng nhập hiện tại: WeChat gắn một token với một phiên, nên phiên cũ ngừng hoạt động.",
+    "qrReason": {
+      "expired": "Mã QR đã hết hạn. Nhấn Thử lại để lấy mã mới.",
+      "timeout": "Chưa ai xác nhận quét trong thời gian cho phép. Nhấn Thử lại để lấy mã mới.",
+      "network": "Không tiếp cận được WeChat trong lúc chờ quét. Kiểm tra mạng hoặc proxy rồi thử lại.",
+      "error": "WeChat đã từ chối yêu cầu kích hoạt.",
+      "start": "Không thể bắt đầu phiên QR.",
+      "generic": "Kích hoạt thất bại."
+    }
   },
   "bitrix24": {
     "portalSelect": {

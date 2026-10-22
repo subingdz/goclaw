@@ -71,6 +71,7 @@
 | 向量与检索 | embedding 维度**以数据库列为准**:启动即读取 pgvector 列宽,provider 声明的宽度与列不一致时直接拒绝启动并打印修复命令;`goclaw migrate embed-dims --to N` 可重设定(先 `--dry-run` 列出宽度 / 待清空行数 / 索引数)。留空表示"不发送截断参数",使 bge-m3 这类原生宽度已匹配的模型可用 | 系统设置 → Embedding;Providers → Embedding |
 | 语音转写 | `audio.stt` 成为唯一真配置面(OpenAI 兼容端点，如 SiliconFlow SenseVoiceSmall)、`timeout_ms` 真正生效、QQ/微信语音的 **SILK** 由外部解码器处理(ffmpeg 解不了 SILK，启动日志会说明有没有找到)；密钥只走 `config_secrets` / `GOCLAW_AUDIO_STT_API_KEY`。两个面板的 stt 表单此前是"假配置面"，现在都写 `audio.stt` | 配置 → Integrations → Speech-to-Text；桌面端 内置工具 → stt |
 | 技能生态 | ClawHub / GitHub 社区技能源（默认关闭）：搜索→人工检视（文件清单、可执行文件、声明依赖、缺失依赖、是否需要 shell、安全结论只给原因和行号）→安装；装完不授权给任何 agent、不自动 pip/npm 装依赖，内容风险硬拒；agent 侧 `skill_install` 是两步协议且拒绝 cron/心跳/子 agent 发起 | 技能 → 社区；`skills.registries.*` |
+| 消息渠道 | **QQ 官方机器人**(WebSocket bot;群/私聊富媒体上传,TTS 回复渲染成可点的语音条)、**微信个人号 iLink**(面板扫码激活、token 加密入库、加密 CDN 媒体收发且**主机钉定 + 逐跳 SSRF 校验**、协议限制按设计报错而非死循环)、飞书/Lark、Zalo | 渠道 → 新建实例 |
 
 ## 核心特性
 

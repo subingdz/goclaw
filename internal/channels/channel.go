@@ -78,6 +78,8 @@ const (
 	TypeFacebook     = "facebook"
 	TypeFeishu       = "feishu"
 	TypePancake      = "pancake"
+	TypeQQ           = "qq"
+	TypeWeixin       = "weixin"
 	TypeSlack        = "slack"
 	TypeTelegram     = "telegram"
 	TypeWhatsApp     = "whatsapp"

@@ -105,6 +105,14 @@ const (
 	EventWhatsAppQRCode = "whatsapp.qr.code"
 	EventWhatsAppQRDone = "whatsapp.qr.done"
 
+	// WeChat (iLink) QR activation events (client-scoped, not broadcast).
+	// EventWeixinQRStatus carries intermediate scan states ("scaned"), which the phone
+	// needs time to act on — the code alone would look frozen to whoever is standing at
+	// the screen holding the other device.
+	EventWeixinQRCode   = "weixin.qr.code"
+	EventWeixinQRStatus = "weixin.qr.status"
+	EventWeixinQRDone   = "weixin.qr.done"
+
 	// Tenant access revocation — forces affected user's UI to logout.
 	EventTenantAccessRevoked = "tenant.access.revoked"
 

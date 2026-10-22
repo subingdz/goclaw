@@ -75,9 +75,9 @@ func isContextOverflowError(lower string) bool {
 		"input is too long",         // DashScope
 		"token limit",
 		"too many tokens",
-		"请求输入过长",       // Chinese generic
-		"超出最大长度限制",     // Chinese Qwen
-		"上下文长度",        // Chinese context length
+		"请求输入过长",   // Chinese generic
+		"超出最大长度限制", // Chinese Qwen
+		"上下文长度",    // Chinese context length
 	) || (strings.Contains(lower, "context") &&
 		containsAny(lower, "overflow", "too large", "too long", "limit", "exceeded"))
 }
@@ -97,6 +97,8 @@ func isExternalChannel(channelType string) bool {
 		channels.TypeZaloOA,
 		channels.TypeZaloPersonal,
 		channels.TypePancake,
+		channels.TypeQQ,
+		channels.TypeWeixin,
 		channels.TypeSlack:
 		return true
 	}

@@ -214,6 +214,9 @@ const (
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"
+
+	// WeChat (personal account, iLink)
+	MethodWeixinQRStart = "weixin.qr.start"
 )
 
 // Workstations (Standard edition only — gated at router)

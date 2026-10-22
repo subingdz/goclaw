@@ -727,6 +727,10 @@
     "whatsapp": {
       "createLabel": "Create & Scan QR",
       "formBanner": "After creating, scan the QR code with WhatsApp to authenticate."
+    },
+    "weixin": {
+      "createLabel": "Create & Scan QR",
+      "formBanner": "After creating, scan the QR code with WeChat on your phone to activate this channel."
     }
   },
   "fallback": {
@@ -791,6 +795,28 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "weixin": {
+    "initializing": "Preparing…",
+    "waitingForQr": "Requesting a QR code from WeChat…",
+    "scanHint": "Open WeChat on your phone, scan this code, then confirm the login",
+    "scannedConfirm": "Scanned — confirm the login in WeChat on your phone",
+    "loginSuccessLoading": "✅ WeChat activated! Starting the channel…",
+    "connectedSuccess": "✅ WeChat activated successfully!",
+    "qrAlt": "WeChat login QR code",
+    "skip": "Skip",
+    "retry": "Retry",
+    "close": "Close",
+    "reauthTitle": "Activate WeChat — {{name}}",
+    "replaceTokenWarning": "Scanning a new code replaces the current login: WeChat binds one token to one session, so the previous session stops working.",
+    "qrReason": {
+      "expired": "The QR code expired. Click Retry to get a new one.",
+      "timeout": "Nobody confirmed the scan in time. Click Retry to get a new code.",
+      "network": "WeChat could not be reached while waiting for the scan. Check the network or proxy, then retry.",
+      "error": "WeChat refused the activation request.",
+      "start": "The QR session could not be started.",
+      "generic": "Activation failed."
+    }
   },
   "bitrix24": {
     "portalSelect": {

@@ -31,9 +31,16 @@ const (
 //   - zalo_personal: internal/channels/zalo/personal/send.go:42
 //   - pancake:  internal/channels/pancake/media_handler.go:18
 //   - facebook: internal/channels/facebook/facebook.go:205
+//   - qq:       internal/channels/qq/media_send.go:146 (base64 upload + msg_type 7)
+//   - weixin:   internal/channels/weixin/media_out.go:73 (encrypted-CDN upload + signed ref)
 //
 // NOT in this list:
 //   - zalo_oa: internal/channels/zalo/zalo.go:115 — Send() does NOT consume msg.Media
+//
+// Both qq and weixin carry attachments as **local paths only**: the upload is made from bytes on
+// disk. A remote media_url — what the webhook API hands over — is refused and announced, because
+// fetching arbitrary remote URLs on the send path is a second SSRF surface these two adapters do
+// not have, unlike telegram/discord/slack which pass the URL to their own servers.
 var mediaCapableTypes = map[string]bool{
 	TypeTelegram:     true,
 	TypeDiscord:      true,
@@ -43,6 +50,8 @@ var mediaCapableTypes = map[string]bool{
 	TypeZaloPersonal: true,
 	TypePancake:      true,
 	TypeFacebook:     true,
+	TypeQQ:           true,
+	TypeWeixin:       true,
 }
 
 var mediaBatchCapabilities = map[string]MediaBatchCapability{
@@ -57,6 +66,19 @@ var mediaBatchCapabilities = map[string]MediaBatchCapability{
 		Grouping:       MediaBatchGroupingSingleMessage,
 	},
 	TypeSlack: {
+		Supported:      true,
+		MaxAttachments: 0,
+		Grouping:       MediaBatchGroupingOrdered,
+	},
+	// One upload and one msg_type=7 message per file: QQ has no multi-attachment envelope for
+	// bots, so order is all that can be preserved.
+	TypeQQ: {
+		Supported:      true,
+		MaxAttachments: 0,
+		Grouping:       MediaBatchGroupingOrdered,
+	},
+	// Same shape on iLink: one getuploadurl + one sendmessage per file.
+	TypeWeixin: {
 		Supported:      true,
 		MaxAttachments: 0,
 		Grouping:       MediaBatchGroupingOrdered,

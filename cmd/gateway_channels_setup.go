@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/weixin"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
@@ -162,6 +163,7 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr, instanceLoader).Register(server.Router())
+		weixin.NewQRMethods(pgStores.ChannelInstances, instanceLoader).Register(server.Router())
 	}
 
 	// Register agent links WS RPC methods

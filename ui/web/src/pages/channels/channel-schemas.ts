@@ -122,6 +122,13 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
   // lives on the bitrix_portals row, not the channel instance. Authorize the portal
   // once via /bitrix24/install, then create channel instances against that portal.
   bitrix24: [],
+  // WeChat carries no typed credentials: the token is whatever the QR scan returns and is
+  // written onto the instance by weixin.qr.start.
+  weixin: [],
+  qq: [
+    { key: "app_id", label: "App ID", type: "text", required: true, placeholder: "1xxxxxx", help: "Bot App ID from the QQ Open Platform console" },
+    { key: "app_secret", label: "App Secret", type: "password", required: true, help: "Bot App Secret. Stored in the credentials field, never in config.json" },
+  ],
 };
 
 // --- Pancake platform options ---
@@ -209,6 +216,17 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "group_allow_from", label: "Group Allowed Users", type: "tags", help: "Separate allowlist for group senders" },
     ...chatBehaviorOverrideFields,
   ],
+  qq: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "open" },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true, help: "QQ pushes @mentions only by default. The console switch “接收所有消息” (receive all group messages) also delivers plain group chatter; this setting decides whether the bot answers it." },
+    { key: "text_chunk_limit", label: "Text Chunk Limit", type: "number", defaultValue: 1500, help: "QQ publishes no per-message character limit; this is a conservative default. Lower it if long answers are rejected." },
+    { key: "history_limit", label: "Group History Limit", type: "number", help: "Max pending group messages for context (0 = disabled)" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "user_openid for private chats, member_openid for groups" },
+    { key: "group_allow_from", label: "Group Allowed Users", type: "tags", help: "Separate allowlist for group senders" },
+    { key: "api_base", label: "API Base URL", type: "text", placeholder: "https://api.bot.qq.com", advanced: true, help: "Only set this to route QQ traffic through a relay you control: the websocket endpoint and every REST call are taken from this host." },
+    ...chatBehaviorOverrideFields,
+  ],
   zalo_oa: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "webhook_url", label: "Webhook URL", type: "text", placeholder: "https://..." },
@@ -229,6 +247,16 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "require_mention", label: "Require @Mention in Groups", type: "boolean", help: "Only respond in group chats when the bot is explicitly @mentioned" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
     ...chatBehaviorOverrideFields,
+  ],
+  weixin: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "WeChat user IDs (from_user_id). Leave empty to let anyone who messages this account pair with the bot." },
+    { key: "text_chunk_limit", label: "Text Chunk Limit", type: "number", defaultValue: 4000, help: "iLink publishes no character limit; lower it if long answers are rejected." },
+    { key: "history_limit", label: "History Limit", type: "number", help: "Max pending messages kept for context (0 = disabled)" },
+    { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://127.0.0.1:7890", advanced: true, help: "Route iLink traffic through a proxy you control" },
+    { key: "base_url", label: "iLink Base URL", type: "text", placeholder: "https://ilinkai.weixin.qq.com/", advanced: true, help: "Only set this to route WeChat traffic through a relay you control. Scan redirects are still restricted to *.weixin.qq.com." },
+    { key: "cdn_base_url", label: "Media CDN Base URL", type: "text", placeholder: "https://novac2c.cdn.weixin.qq.com/c2c", advanced: true, help: "The only host media is fetched from and uploaded to. Peer-supplied and service-supplied URLs on any other host are rebuilt against this host instead of followed." },
+    { key: "state_dir", label: "State Directory", type: "text", placeholder: "~/.goclaw/data/channels/weixin", advanced: true, help: "Where the poll cursor and per-peer reply references are kept. Needed on disk-constrained or containerized deployments that must point this elsewhere." },
   ],
   facebook: [
     { key: "page_id", label: "Page ID", type: "text", required: true, help: "Facebook Page numeric ID" },
@@ -381,5 +409,10 @@ export const wizardConfig: Partial<Record<string, WizardConfig>> = {
     steps: ["auth"],
     createLabel: "wizard.whatsapp.createLabel",
     formBanner: "wizard.whatsapp.formBanner",
+  },
+  weixin: {
+    steps: ["auth"],
+    createLabel: "wizard.weixin.createLabel",
+    formBanner: "wizard.weixin.formBanner",
   },
 };

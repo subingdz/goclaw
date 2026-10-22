@@ -4,6 +4,8 @@ export const CHANNEL_TYPES = [
   { value: "facebook", label: "Facebook" },
   { value: "feishu", label: "Feishu / Lark" },
   { value: "pancake", label: "Pancake (pages.fm)" },
+  { value: "qq", label: "QQ" },
+  { value: "weixin", label: "WeChat (personal)" },
   { value: "slack", label: "Slack" },
   { value: "telegram", label: "Telegram" },
   { value: "whatsapp", label: "WhatsApp" },
