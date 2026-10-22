@@ -42,6 +42,11 @@ type SkillsHandler struct {
 	uploadLocks    sync.Map // per-slug mutex; bounded by validated slug set, entries are tiny (*sync.Mutex)
 	uploadLimitCfg config.SkillsConfig
 	systemConfigs  store.SystemConfigStore
+
+	// Community skill sources, set at startup by SetRegistries. Both stay nil when the feature
+	// is off in config, and every registry handler answers 503 in that case.
+	registries        *skills.Registries
+	registryInstaller *skills.RegistryInstaller
 }
 
 func (h *SkillsHandler) SetEvolutionStore(evolution store.SkillEvolutionStore, activity store.ActivityStore) {
@@ -143,6 +148,11 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/skills/export/preview", h.adminMiddleware(h.handleSkillsExportPreview))
 	mux.HandleFunc("GET /v1/skills/export", h.adminMiddleware(h.handleSkillsExport))
 	mux.HandleFunc("POST /v1/skills/import", h.adminMiddleware(h.handleSkillsImport))
+	// Community registry: reads are admin + master scope, install is owner + master scope.
+	mux.HandleFunc("GET /v1/skills/registry/sources", h.adminMiddleware(h.handleRegistrySources))
+	mux.HandleFunc("GET /v1/skills/registry/search", h.adminMiddleware(h.handleRegistrySearch))
+	mux.HandleFunc("POST /v1/skills/registry/inspect", h.adminMiddleware(h.handleRegistryInspect))
+	mux.HandleFunc("POST /v1/skills/registry/install", h.adminMiddleware(h.handleRegistryInstall))
 }
 
 func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {

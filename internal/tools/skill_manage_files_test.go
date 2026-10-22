@@ -20,6 +20,7 @@ type skillManageFilesStore struct {
 	owners                map[string]string
 	lastUpdates           map[uuid.UUID]map[string]any
 	beforeVersionLockHook func(slug string)
+	grantCalls            int
 }
 
 func newSkillManageFilesStore() *skillManageFilesStore {
@@ -579,12 +580,14 @@ func (s *skillManageFilesStore) StoreMissingDeps(context.Context, uuid.UUID, []s
 	return nil
 }
 func (s *skillManageFilesStore) GrantToAgent(context.Context, uuid.UUID, uuid.UUID, int, string, ...bool) error {
+	s.grantCalls++
 	return nil
 }
 func (s *skillManageFilesStore) RevokeFromAgent(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
 func (s *skillManageFilesStore) GrantToUser(context.Context, uuid.UUID, string, string) error {
+	s.grantCalls++
 	return nil
 }
 func (s *skillManageFilesStore) RevokeFromUser(context.Context, uuid.UUID, string) error { return nil }

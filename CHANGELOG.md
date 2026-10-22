@@ -16,6 +16,34 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Community skill sources (ClawHub and a Git host), off by default** —
+  `skills.registries.<source>.enabled` is the only way to turn a source on, so a
+  gateway never makes an outbound fetch that its operator did not ask for. Both
+  clients pin https (plain http only for loopback) and refuse a redirect that
+  leaves the configured host, and tokens travel as secrets
+  (`config_secrets` keys `skills.registries.<source>.token`, env
+  `GOCLAW_SKILLS_CLAWHUB_TOKEN` / `GOCLAW_SKILLS_GITHUB_TOKEN`), never in
+  config.json.
+  Four endpoints — `GET /v1/skills/registry/{sources,search}`,
+  `POST /v1/skills/registry/{inspect,install}` — back a new **Community** dialog on
+  the Skills page: search, then read the analysis (files and sizes, executables,
+  declared dependencies, dependencies missing on this host, whether it needs a
+  shell, the security findings, and a SKILL.md excerpt) before installing.
+  A registry install goes through exactly the guards a ZIP upload is held to, lands
+  in the tenant `skills-store/<slug>/<version>/` with a `.skill-origin.json`
+  sidecar, and creates **no grants** and **no dependency installs**; a skill whose
+  declared binaries are absent registers `archived` rather than silently half-working.
+  A content-guard finding is a hard refusal with no override flag, and a slug that
+  belongs to a system skill or to another user in the tenant is refused instead of
+  being repointed. Install requires owner + master scope.
+  Agents get a `skill_install` tool (standard edition, and only while a source is
+  enabled) built as a two-call protocol: `inspect` records a single-use, 10-minute
+  proposal for the conversation and returns the analysis to relay, and `install`
+  refuses without one. Turns with no human in them — cron, heartbeat, subagent, team
+  task — are refused before any outbound request, as are non-owner actors and
+  non-master tenants.
+
+
 - **Speech-to-text on inbound voice messages** — `audio.stt` is now the real
   surface: `provider` (`openai_compat` | `elevenlabs` | `proxy`) plus
   `base_url` / `model` / `language` / `fallback` / `timeout_ms`, with

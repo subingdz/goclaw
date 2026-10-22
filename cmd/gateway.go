@@ -415,6 +415,10 @@ func runGateway() {
 		attachSILKDecoder(cfg, audioMgr)
 	}
 
+	// Community skill sources, for the same reason: skills.registries.* can be overlaid from the
+	// DB, and the agent tool must be registered against the same set the HTTP panel uses.
+	skillRegistries := setupSkillRegistries(cfg, toolsReg, pgStores, permPE.IsOwner, dataDir)
+
 	// MCP servers: load from database (single source of truth).
 	// pgStores.MCP is nil on SQLite/desktop builds that don't support MCP tables.
 	// Apply store to MCP manager so ListToolsForAgent can query DB.
@@ -683,6 +687,12 @@ func runGateway() {
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
 	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, domainBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister, usageCapSvc, cfg, cfg.Skills)
+
+	// One source set for both transports: built above after the config overlay, now shared with
+	// the HTTP handlers so a search and an install cannot disagree about what is enabled.
+	if skillsH != nil {
+		skillsH.SetRegistries(skillRegistries)
+	}
 
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {

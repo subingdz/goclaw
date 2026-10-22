@@ -217,6 +217,15 @@ func (c *Config) applyEnvOverrides() {
 		c.ensureAudioSTT().APIKey = v
 	}
 
+	// Community registry tokens, same reasoning — a gateway that never enabled a source must
+	// not grow a registries block.
+	if v := os.Getenv("GOCLAW_SKILLS_CLAWHUB_TOKEN"); v != "" {
+		c.ensureRegistries().ensureClawHub().Token = v
+	}
+	if v := os.Getenv("GOCLAW_SKILLS_GITHUB_TOKEN"); v != "" {
+		c.ensureRegistries().ensureGitHub().Token = v
+	}
+
 	// Auto-enable channels if credentials are provided via env
 	if c.Channels.Telegram.Token != "" {
 		c.Channels.Telegram.Enabled = true

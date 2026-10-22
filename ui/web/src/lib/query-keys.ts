@@ -63,6 +63,7 @@ export const queryKeys = {
     suggestions: (skillId: string) => ["skills", skillId, "suggestions"] as const,
     activity: (skillId: string) => ["skills", skillId, "activity"] as const,
     runtimes: ["skills", "runtimes"] as const,
+    registrySources: ["skills", "registry", "sources"] as const,
   },
   cron: {
     all: ["cron"] as const,

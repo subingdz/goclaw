@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Zap, RefreshCw, Upload, ScanSearch, Download } from "lucide-react";
+import { Zap, RefreshCw, Upload, ScanSearch, Download, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -20,6 +20,9 @@ import { SkillsFilterBar } from "./skills-filter-bar";
 
 const SkillUploadDialog = lazy(() =>
   import("./skill-upload-dialog").then((m) => ({ default: m.SkillUploadDialog }))
+);
+const SkillRegistryDialog = lazy(() =>
+  import("./skill-registry-dialog").then((m) => ({ default: m.SkillRegistryDialog }))
 );
 import { MissingDepsPanel } from "./missing-deps-panel";
 import { SkillTableRow } from "./skill-table-row";
@@ -65,6 +68,7 @@ export function SkillsPage() {
   const skillRef = params.get("skill");
   const [selectedSkill, setSelectedSkill] = useState<(SkillInfo & { content: string }) | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [registryOpen, setRegistryOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SkillInfo | null>(null);
   const [grantsTarget, setGrantsTarget] = useState<SkillInfo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillInfo | null>(null);
@@ -306,6 +310,13 @@ export function SkillsPage() {
         description={t("description")}
         actions={
           <div className="flex gap-2">
+            {/* Community sources are master-scope + owner on the server; a tenant-scoped view
+                would only be able to read 403s, so the entry point is not offered there. */}
+            {!hasTenantScope && (
+              <Button variant="outline" size="sm" onClick={() => setRegistryOpen(true)} className="gap-1">
+                <Globe className="h-3.5 w-3.5" /> {t("registry.button")}
+              </Button>
+            )}
             {tab === "custom" && (
               <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
                 <Upload className="h-3.5 w-3.5" /> {t("upload.button")}
@@ -477,6 +488,7 @@ export function SkillsPage() {
 
       <Suspense fallback={null}>
         <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUpload={uploadSkill} />
+        <SkillRegistryDialog open={registryOpen} onOpenChange={setRegistryOpen} onInstalled={refresh} />
       </Suspense>
 
       <ConfirmDeleteDialog

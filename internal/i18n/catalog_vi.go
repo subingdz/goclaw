@@ -348,6 +348,11 @@ func init() {
 		MsgGitCredBlobMissingField:         "blob credential thiếu trường bắt buộc %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q không được hỗ trợ",
 
+		// Community skill registry
+		MsgSkillRegistryDisabled:      "các nguồn kỹ năng cộng đồng đang bị tắt trên gateway này",
+		MsgSkillRegistrySourceUnknown: "không rõ nguồn kỹ năng: %s",
+		MsgSkillRegistryRefused:       "việc cài đặt đã bị từ chối: %s",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 

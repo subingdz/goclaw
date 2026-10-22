@@ -132,6 +132,10 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 		{Name: "publish_skill", DisplayName: "Publish Skill", Description: "Register a skill directory (created via skill-creator) in the system database, making it discoverable and grantable to agents", Category: "skills", Enabled: true},
 		{Name: "skill_manage", DisplayName: "Skill Manager", Description: "Create, patch, or delete skills from conversation experience", Category: "skills", Enabled: true},
+		// Registered only when a community source is enabled in config (skills.registries.*), so
+		// this row describes a capability the gateway may not have; the tool itself refuses when
+		// no source is enabled, so a stale row cannot make an agent think it can install.
+		{Name: "skill_install", DisplayName: "Skill Install", Description: "Search a community skill source and install a skill after the human approves the analysis (inspect then install)", Category: "skills", Enabled: true},
 		{Name: "mcp_tool_search", DisplayName: "MCP Tool Search", Description: "Search for available MCP external integration tools by keyword (search mode, deferred loading)", Category: "skills", Enabled: true,
 			Requires: []string{"mcp"},
 		},
@@ -144,7 +148,7 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 
 	// Lite edition: remove skill management tools — not available on desktop.
 	if !edition.Current().TeamFullMode {
-		liteHidden := map[string]bool{"skill_manage": true, "publish_skill": true}
+		liteHidden := map[string]bool{"skill_manage": true, "publish_skill": true, "skill_install": true}
 		filtered := defs[:0]
 		for _, d := range defs {
 			if !liteHidden[d.Name] {

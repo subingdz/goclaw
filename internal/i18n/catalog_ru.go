@@ -347,6 +347,11 @@ func init() {
 		MsgGitCredBlobMissingField:         "в блобе учётных данных отсутствует обязательное поле %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q не поддерживается",
 
+		// Community skill registry
+		MsgSkillRegistryDisabled:      "источники навыков сообщества отключены на этом шлюзе",
+		MsgSkillRegistrySourceUnknown: "неизвестный источник навыков: %s",
+		MsgSkillRegistryRefused:       "установка отклонена: %s",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Переслано на %s согласно запросу: %q",
 

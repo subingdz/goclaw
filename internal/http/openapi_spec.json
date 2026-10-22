@@ -5824,6 +5824,222 @@
         }
       }
     },
+    "/v1/skills/registry/sources": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "List enabled community skill sources (admin, master scope)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Caller is not an admin in the master scope"
+          }
+        }
+      }
+    },
+    "/v1/skills/registry/search": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Search enabled community sources (admin, master scope)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Keyword query. An empty query is rejected; there is no browse-all."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict to one source name. Sources without keyword search are skipped, not failed."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "502": {
+            "description": "Every enabled source failed"
+          },
+          "503": {
+            "description": "No community source is enabled in config"
+          }
+        }
+      }
+    },
+    "/v1/skills/registry/inspect": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Download one bundle and analyse it without writing anything (admin, master scope)",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "slug"
+                ],
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "description": "The source's own identifier, e.g. \"pdf\" or \"owner/repo/skills/pdf\"."
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Optional ref pin."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis plus a SKILL.md preview. unsafe=true is a valid answer, not an error."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "The source refused the content (moderation flag)"
+          },
+          "422": {
+            "description": "The bundle failed path or size checks"
+          }
+        }
+      }
+    },
+    "/v1/skills/registry/install": {
+      "post": {
+        "tags": [
+          "Skills"
+        ],
+        "summary": "Install a community skill into the tenant skills-store (owner, master scope)",
+        "description": "Re-downloads and re-analyses the bundle; a content-guard finding is a hard refusal. Installs create no grants and install no dependencies.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "slug"
+                ],
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already installed with identical content; no new version"
+          },
+          "201": {
+            "description": "Installed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Not an owner, missing master scope, or the content guard refused the bundle"
+          },
+          "409": {
+            "description": "The slug is a system skill or belongs to another user in this tenant"
+          },
+          "422": {
+            "description": "The bundle failed path or size checks"
+          }
+        }
+      }
+    },
     "/v1/skills/{id}/grants/agent": {
       "post": {
         "tags": [

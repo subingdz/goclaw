@@ -388,4 +388,9 @@ const (
 	MsgGitCredHostScopeInvalid         = "error.git_cred_host_scope_invalid"         // "host_scope %q is not a valid hostname"
 	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"         // "blob missing required field %q"
 	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"      // "credential_type %q is not supported"
+
+	// --- Community skill registry ---
+	MsgSkillRegistryDisabled      = "error.skill_registry_disabled"       // "community skill sources are disabled on this gateway"
+	MsgSkillRegistrySourceUnknown = "error.skill_registry_source_unknown" // "unknown skill source: %s"
+	MsgSkillRegistryRefused       = "error.skill_registry_refused"        // "install refused: %s"
 )

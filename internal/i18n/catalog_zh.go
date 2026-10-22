@@ -348,6 +348,11 @@ func init() {
 		MsgGitCredBlobMissingField:         "凭据 blob 缺少必填字段 %q",
 		MsgGitCredUnsupportedCredType:      "不支持的 credential_type %q",
 
+		// Community skill registry
+		MsgSkillRegistryDisabled:      "此网关未启用社区技能源",
+		MsgSkillRegistrySourceUnknown: "未知的技能源：%s",
+		MsgSkillRegistryRefused:       "安装被拒绝：%s",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 

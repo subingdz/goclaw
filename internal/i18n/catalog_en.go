@@ -348,6 +348,11 @@ func init() {
 		MsgGitCredBlobMissingField:         "credential blob is missing required field %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q is not supported",
 
+		// Community skill registry
+		MsgSkillRegistryDisabled:      "community skill sources are disabled on this gateway",
+		MsgSkillRegistrySourceUnknown: "unknown skill source: %s",
+		MsgSkillRegistryRefused:       "install refused: %s",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
 

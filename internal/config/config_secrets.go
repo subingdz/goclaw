@@ -68,6 +68,16 @@ func (c *Config) MaskedCopy() *Config {
 		maskNonEmpty(&cp.Audio.Stt.APIKey)
 	}
 
+	// Mask community registry tokens
+	if cp.Skills.Registries != nil {
+		if cp.Skills.Registries.ClawHub != nil {
+			maskNonEmpty(&cp.Skills.Registries.ClawHub.Token)
+		}
+		if cp.Skills.Registries.GitHub != nil {
+			maskNonEmpty(&cp.Skills.Registries.GitHub.Token)
+		}
+	}
+
 	// Mask Tailscale auth key
 	maskNonEmpty(&cp.Tailscale.AuthKey)
 
@@ -123,6 +133,16 @@ func (c *Config) StripSecrets() {
 	// STT API key — the disk copy must never carry it, same as every other secret
 	if c.Audio != nil && c.Audio.Stt != nil {
 		c.Audio.Stt.APIKey = ""
+	}
+
+	// Community registry tokens
+	if c.Skills.Registries != nil {
+		if c.Skills.Registries.ClawHub != nil {
+			c.Skills.Registries.ClawHub.Token = ""
+		}
+		if c.Skills.Registries.GitHub != nil {
+			c.Skills.Registries.GitHub.Token = ""
+		}
 	}
 
 	// Tailscale auth key
@@ -187,6 +207,16 @@ func (c *Config) StripMaskedSecrets() {
 		stripIfMasked(&c.Audio.Stt.APIKey)
 	}
 
+	// Community registry tokens
+	if c.Skills.Registries != nil {
+		if c.Skills.Registries.ClawHub != nil {
+			stripIfMasked(&c.Skills.Registries.ClawHub.Token)
+		}
+		if c.Skills.Registries.GitHub != nil {
+			stripIfMasked(&c.Skills.Registries.GitHub.Token)
+		}
+	}
+
 	// Tailscale auth key
 	stripIfMasked(&c.Tailscale.AuthKey)
 }
@@ -214,6 +244,14 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 	if v, ok := secrets["audio.stt.api_key"]; ok && v != "" {
 		c.ensureAudioSTT().APIKey = v
 	}
+
+	// Community registry tokens, same reasoning.
+	if v, ok := secrets["skills.registries.clawhub.token"]; ok && v != "" {
+		c.ensureRegistries().ensureClawHub().Token = v
+	}
+	if v, ok := secrets["skills.registries.github.token"]; ok && v != "" {
+		c.ensureRegistries().ensureGitHub().Token = v
+	}
 }
 
 // ExtractDBSecrets returns the config_secrets key-value pairs from the config.
@@ -237,6 +275,15 @@ func (c *Config) ExtractDBSecrets() map[string]string {
 
 	if c.Audio != nil && c.Audio.Stt != nil {
 		collect("audio.stt.api_key", c.Audio.Stt.APIKey)
+	}
+
+	if c.Skills.Registries != nil {
+		if c.Skills.Registries.ClawHub != nil {
+			collect("skills.registries.clawhub.token", c.Skills.Registries.ClawHub.Token)
+		}
+		if c.Skills.Registries.GitHub != nil {
+			collect("skills.registries.github.token", c.Skills.Registries.GitHub.Token)
+		}
 	}
 
 	return secrets
