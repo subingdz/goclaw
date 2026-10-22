@@ -526,7 +526,7 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 // setupAudioExtras wires Music and SFX providers into the audio Manager.
 // ElevenLabs is registered for both SFX and Music when an API key is present.
 // MiniMax music is registered when cfg.Audio.Music is configured with a key.
-// Phase 4 will add STT providers here.
+// STT is delegated to registerSTTProviders (cmd/gateway_stt.go).
 func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
 	ellKey := cfg.Tts.ElevenLabs.APIKey
 	ellBase := cfg.Tts.ElevenLabs.BaseURL
@@ -562,44 +562,5 @@ func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
 		}
 	}
 
-	// STT chain. Built from what actually registered, so Transcribe never walks
-	// a name it will only skip with a warning. "proxy" is always appended: it is
-	// registered later, per channel, by BridgeLegacySTT.
-	var sttChain []string
-
-	// OpenAI-compatible self-hosted endpoint, first when present: it is an
-	// explicit operator choice, and it keeps audio on the local network.
-	if base := cfg.Tts.OpenAICompat.APIBase; base != "" {
-		provider, err := openaicompat.NewSTTProvider(openaicompat.Config{
-			APIBase:   base,
-			APIKey:    cfg.Tts.OpenAICompat.APIKey,
-			STTModel:  cfg.Tts.OpenAICompat.STTModel,
-			TimeoutMs: cfg.Tts.TimeoutMs,
-		})
-		if err != nil {
-			slog.Warn("audio.stt: openai_compat not registered", "error", err)
-		} else {
-			mgr.RegisterSTT(provider)
-			sttChain = append(sttChain, provider.Name())
-			slog.Info("audio.stt: openai_compat registered", "api_base", base)
-		}
-	}
-
-	// ElevenLabs STT (Scribe v2) — reuse TTS credentials. Registered as tenant-scope
-	// default; per-request tenant override lands via builtin_tools[stt] in Phase 5
-	// channel migration. Legacy per-channel STTProxyURL is bridged separately.
-	if ellKey != "" {
-		mgr.RegisterSTT(elevenlabs.NewSTTProvider(elevenlabs.Config{
-			APIKey:  ellKey,
-			BaseURL: ellBase,
-		}))
-		sttChain = append(sttChain, "elevenlabs")
-		slog.Info("audio.stt: elevenlabs registered")
-	}
-
-	if len(sttChain) > 0 {
-		sttChain = append(sttChain, "proxy")
-		mgr.SetSTTChain(sttChain)
-		slog.Info("audio.stt: chain configured", "chain", sttChain)
-	}
+	registerSTTProviders(cfg, mgr, ellKey, ellBase)
 }
