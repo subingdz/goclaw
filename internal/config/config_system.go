@@ -96,6 +96,19 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("tts.max_length", &c.Tts.MaxLength)
 	integer("tts.timeout_ms", &c.Tts.TimeoutMs)
 
+	// STT (audio.stt). The API key is deliberately absent: it travels through the
+	// config_secrets table (ApplyDBSecrets), never through this plaintext map.
+	// An empty provider means "not configured", which is what keeps the legacy
+	// TTS-derived wiring in charge (see cmd/gateway_stt.go).
+	st := c.ensureAudioSTT()
+	str("audio.stt.provider", &st.Provider)
+	str("audio.stt.base_url", &st.BaseURL)
+	str("audio.stt.model", &st.Model)
+	str("audio.stt.language", &st.Language)
+	str("audio.stt.fallback", &st.Fallback)
+	str("audio.stt.silk_decoder", &st.SilkDecoder)
+	integer("audio.stt.timeout_ms", &st.TimeoutMs)
+
 	// Cron
 	integer("cron.max_retries", &c.Cron.MaxRetries)
 	str("cron.default_timezone", &c.Cron.DefaultTimezone)

@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useDesktopSttConfig, isMaskedSecret, type SttProviderName } from '../../hooks/use-stt-config'
 
-type SttProviderName = 'elevenlabs' | 'proxy'
+// The dialog behind Built-in tools → stt → Settings.
+//
+// It used to edit the tool's own settings blob (provider list, ElevenLabs key, proxy URL) and
+// nothing in the gateway read any of that except whatsapp_enabled: voice was transcribed according
+// to `audio.stt`, which this dialog never touched. So the form is now the editor for `audio.stt`
+// itself over config.get/config.patch, and keeps the one setting that genuinely lives on the tool.
 
-const ALL_STT_PROVIDERS: SttProviderName[] = ['elevenlabs', 'proxy']
+const PROVIDERS: SttProviderName[] = ['openai_compat', 'elevenlabs', 'proxy']
 
-interface SttSettings {
-  providers: SttProviderName[]
-  elevenlabs: { api_key: string; default_language: string }
-  proxy: { url: string; api_key: string; tenant_id: string }
-  whatsapp_enabled: boolean
-}
+const inputCls =
+  'w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent'
 
 interface Props {
   initialSettings: Record<string, unknown>
@@ -18,167 +20,159 @@ interface Props {
   onCancel: () => void
 }
 
-function resolveInitial(raw: Record<string, unknown>): SttSettings {
-  const el = (raw.elevenlabs as Record<string, unknown>) ?? {}
-  const px = (raw.proxy as Record<string, unknown>) ?? {}
-  return {
-    providers: (raw.providers as SttProviderName[]) ?? ['elevenlabs', 'proxy'],
-    elevenlabs: {
-      api_key: (el.api_key as string) ?? '',
-      default_language: (el.default_language as string) ?? 'en',
-    },
-    proxy: {
-      url: (px.url as string) ?? '',
-      api_key: (px.api_key as string) ?? '',
-      tenant_id: (px.tenant_id as string) ?? '',
-    },
-    whatsapp_enabled: (raw.whatsapp_enabled as boolean) ?? false,
-  }
-}
-
-function buildPayload(s: SttSettings): Record<string, unknown> {
-  return {
-    providers: s.providers,
-    elevenlabs: { api_key: s.elevenlabs.api_key, default_language: s.elevenlabs.default_language },
-    proxy: { url: s.proxy.url, api_key: s.proxy.api_key, tenant_id: s.proxy.tenant_id },
-    whatsapp_enabled: s.whatsapp_enabled,
-  }
-}
-
 export function SttProviderForm({ initialSettings, onSave, onCancel }: Props) {
   const { t } = useTranslation('tools')
-  const init = resolveInitial(initialSettings)
+  const { draft, setDraft, loading, saving, error, save } = useDesktopSttConfig()
+  const [whatsappEnabled, setWhatsappEnabled] = useState(
+    (initialSettings.whatsapp_enabled as boolean) ?? false,
+  )
+  const [formError, setFormError] = useState('')
+  const [saved, setSaved] = useState(false)
 
-  const [providers, setProviders] = useState<SttProviderName[]>(init.providers)
-  const [elApiKey, setElApiKey] = useState(init.elevenlabs.api_key)
-  const [elLang, setElLang] = useState(init.elevenlabs.default_language)
-  const [proxyUrl, setProxyUrl] = useState(init.proxy.url)
-  const [proxyApiKey, setProxyApiKey] = useState(init.proxy.api_key)
-  const [proxyTenantId, setProxyTenantId] = useState(init.proxy.tenant_id)
-  const [whatsappEnabled, setWhatsappEnabled] = useState(init.whatsapp_enabled)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  useEffect(() => {
+    // A (re)load clears the previous validation complaint; fetch failures stay as the hook's own
+    // error and are rendered below.
+    setFormError('')
+  }, [loading])
 
-  const toggleProvider = (name: SttProviderName) => {
-    setProviders((prev) =>
-      prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name],
-    )
-  }
+  const set = (patch: Partial<typeof draft>) => setDraft((prev) => ({ ...prev, ...patch }))
 
   const handleSave = async () => {
-    if (providers.length === 0) {
-      setError(t('builtin.sttForm.providersRequiredError'))
+    // A provider chosen without an endpoint is how a gateway ends up with an empty chain and
+    // voice messages that quietly stay untranscribed. Say it before the save, not after.
+    if (draft.provider && !draft.base_url.trim()) {
+      setFormError(t('builtin.sttForm.baseUrlRequiredError'))
       return
     }
-    setError('')
-    setSaving(true)
+    setFormError('')
+    if (!(await save(draft))) return
     try {
-      await onSave(buildPayload({
-        providers,
-        elevenlabs: { api_key: elApiKey, default_language: elLang },
-        proxy: { url: proxyUrl, api_key: proxyApiKey, tenant_id: proxyTenantId },
-        whatsapp_enabled: whatsappEnabled,
-      }))
+      await onSave({ whatsapp_enabled: whatsappEnabled })
+      setSaved(true)
     } catch {
-      // error surfaced by parent
-    } finally {
-      setSaving(false)
+      // The parent surfaces a tool-setting failure.
     }
   }
 
   return (
     <div className="flex flex-col overflow-hidden">
-      {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         <p className="text-xs text-text-muted">{t('builtin.sttForm.description')}</p>
 
-        {/* Providers */}
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-text-secondary">{t('builtin.sttForm.providersLabel')}</p>
-          <div className="flex flex-wrap gap-3">
-            {ALL_STT_PROVIDERS.map((p) => (
-              <label key={p} className="flex items-center gap-1.5 cursor-pointer select-none text-sm">
-                <input
-                  type="checkbox"
-                  checked={providers.includes(p)}
-                  onChange={() => toggleProvider(p)}
-                  className="h-4 w-4 rounded"
-                />
-                <span className="capitalize">{p}</span>
-              </label>
+        {loading && <p className="text-xs text-text-muted">{t('builtin.sttForm.loading')}</p>}
+
+        <div className="space-y-1">
+          <label className="text-xs text-text-secondary">{t('builtin.sttForm.providerLabel')}</label>
+          <select
+            value={draft.provider}
+            onChange={(e) => set({ provider: e.target.value })}
+            className={inputCls}
+            data-testid="stt-provider"
+          >
+            <option value="">{t('builtin.sttForm.providerNone')}</option>
+            {PROVIDERS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
             ))}
-          </div>
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          </select>
         </div>
 
-        {/* ElevenLabs */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-text-primary">{t('builtin.sttForm.elevenlabsSectionTitle')}</p>
+        <div className="space-y-1">
+          <label className="text-xs text-text-secondary">{t('builtin.sttForm.baseUrlLabel')}</label>
+          <input
+            type="text"
+            value={draft.base_url}
+            onChange={(e) => set({ base_url: e.target.value })}
+            placeholder="https://api.siliconflow.cn/v1"
+            className={inputCls}
+            data-testid="stt-base-url"
+          />
+          <p className="text-[11px] text-text-muted">{t('builtin.sttForm.baseUrlHint')}</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className="text-xs text-text-secondary">{t('builtin.sttForm.elevenlabsApiKeyLabel')}</label>
-            <input
-              type="password"
-              value={elApiKey}
-              onChange={(e) => setElApiKey(e.target.value)}
-              placeholder="xi-..."
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-text-secondary">{t('builtin.sttForm.elevenlabsDefaultLanguageLabel')}</label>
+            <label className="text-xs text-text-secondary">{t('builtin.sttForm.modelLabel')}</label>
             <input
               type="text"
-              value={elLang}
-              onChange={(e) => setElLang(e.target.value)}
-              placeholder="en"
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-        </div>
-
-        {/* Proxy */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-text-primary">{t('builtin.sttForm.proxySectionTitle')}</p>
-          <div className="space-y-1">
-            <label className="text-xs text-text-secondary">{t('builtin.sttForm.proxyUrlLabel')}</label>
-            <input
-              type="url"
-              value={proxyUrl}
-              onChange={(e) => setProxyUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              value={draft.model}
+              onChange={(e) => set({ model: e.target.value })}
+              placeholder="FunAudioLLM/SenseVoiceSmall"
+              className={inputCls}
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-text-secondary">{t('builtin.sttForm.proxyApiKeyLabel')}</label>
-            <input
-              type="password"
-              value={proxyApiKey}
-              onChange={(e) => setProxyApiKey(e.target.value)}
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-text-secondary">{t('builtin.sttForm.proxyTenantIdLabel')}</label>
+            <label className="text-xs text-text-secondary">{t('builtin.sttForm.languageLabel')}</label>
             <input
               type="text"
-              value={proxyTenantId}
-              onChange={(e) => setProxyTenantId(e.target.value)}
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              value={draft.language}
+              onChange={(e) => set({ language: e.target.value })}
+              placeholder="vi"
+              className={inputCls}
             />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary">{t('builtin.sttForm.fallbackLabel')}</label>
+            <input
+              type="text"
+              value={draft.fallback}
+              onChange={(e) => set({ fallback: e.target.value })}
+              placeholder="proxy"
+              className={inputCls}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary">{t('builtin.sttForm.timeoutLabel')}</label>
+            <input
+              type="number"
+              min={0}
+              step={1000}
+              value={draft.timeout_ms || 0}
+              onChange={(e) => set({ timeout_ms: Number(e.target.value) })}
+              className={inputCls}
+            />
+            <p className="text-[11px] text-text-muted">{t('builtin.sttForm.timeoutHint')}</p>
           </div>
         </div>
 
-        {/* WhatsApp section — privacy banner ABOVE toggle */}
+        <div className="space-y-1">
+          <label className="text-xs text-text-secondary">{t('builtin.sttForm.apiKeyLabel')}</label>
+          <input
+            type="password"
+            value={draft.api_key}
+            onChange={(e) => set({ api_key: e.target.value })}
+            placeholder={isMaskedSecret(draft.api_key) ? t('builtin.sttForm.apiKeySet') : 'sk-...'}
+            className={inputCls}
+            data-testid="stt-api-key"
+          />
+          <p className="text-[11px] text-text-muted">{t('builtin.sttForm.apiKeyHint')}</p>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs text-text-secondary">{t('builtin.sttForm.silkDecoderLabel')}</label>
+          <input
+            type="text"
+            value={draft.silk_decoder}
+            onChange={(e) => set({ silk_decoder: e.target.value })}
+            placeholder="/usr/local/bin/silk_v3_decoder"
+            className={inputCls}
+          />
+          <p className="text-[11px] text-text-muted">{t('builtin.sttForm.silkDecoderHint')}</p>
+        </div>
+
+        <p className="text-[11px] text-text-muted">{t('builtin.sttForm.restartNote')}</p>
+
+        {/* WhatsApp section — privacy banner ABOVE the toggle */}
         <div className="space-y-2">
-          {/* Privacy banner */}
           <div
             className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
             data-testid="whatsapp-privacy-banner"
           >
             <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
             <span>{t('builtin.sttForm.whatsappPrivacyWarning')}</span>
           </div>
@@ -192,6 +186,17 @@ export function SttProviderForm({ initialSettings, onSave, onCancel }: Props) {
             <span className="font-medium">{t('builtin.sttForm.whatsappEnabledLabel')}</span>
           </label>
         </div>
+
+        {(error || formError) && (
+          <p className="text-xs text-red-500" data-testid="stt-form-error">
+            {formError || error}
+          </p>
+        )}
+        {saved && (
+          <p className="text-xs text-green-600" data-testid="stt-form-saved">
+            {t('builtin.sttForm.saved')}
+          </p>
+        )}
       </div>
 
       {/* Footer */}
@@ -199,22 +204,16 @@ export function SttProviderForm({ initialSettings, onSave, onCancel }: Props) {
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-1.5 text-xs border border-border rounded-lg text-text-secondary hover:bg-surface-tertiary transition-colors"
+          className="px-3 py-1.5 text-sm rounded-lg border border-border text-text-secondary hover:text-text-primary"
         >
           {t('builtin.sttForm.cancel')}
         </button>
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-1.5 text-xs bg-accent text-white rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 flex items-center gap-1.5"
+          disabled={saving || loading}
+          className="px-3 py-1.5 text-sm rounded-lg bg-accent text-white disabled:opacity-50"
         >
-          {saving && (
-            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-          )}
           {saving ? t('builtin.sttForm.saving') : t('builtin.sttForm.save')}
         </button>
       </div>

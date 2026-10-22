@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -807,8 +808,18 @@ func (c *Channel) transcribeMediaAudio(ctx context.Context, m MediaInfo) (string
 	if c.audioMgr == nil {
 		return "", nil
 	}
+	// An empty chain is the normal state for a gateway that never configured speech
+	// recognition. Without this gate the call below returns "chain is empty" and the
+	// caller logs a Warn for every single voice message, which is noise that also
+	// contradicts the documented behaviour; every other channel gates here.
+	if !c.audioMgr.STTAvailable(ctx) {
+		slog.Debug("telegram: no STT provider available, leaving voice untranscribed", "type", m.Type)
+		return "", nil
+	}
 
-	sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// The 10s here is only the default: an operator who raised audio.stt.timeout_ms for long
+	// voice notes must actually get that, instead of being cut silently.
+	sttCtx, cancel := context.WithTimeout(ctx, c.audioMgr.STTTimeout(10*time.Second))
 	defer cancel()
 	sttCtx = audio.WithChannel(sttCtx, c.Type())
 
@@ -827,9 +838,7 @@ func (c *Channel) transcribeMediaAudio(ctx context.Context, m MediaInfo) (string
 }
 
 func telegramAudioSTTMime(contentType string) string {
-	mime := strings.TrimSpace(contentType)
-	if mime == "" || strings.EqualFold(mime, "application/octet-stream") {
-		return "audio/ogg"
-	}
-	return mime
+	// Telegram voice notes are OGG_OPUS and its documents report no usable audio MIME,
+	// so the ogg fallback belongs to this channel, not to the shared helper.
+	return media.AudioSTTMime(contentType, "audio/ogg")
 }

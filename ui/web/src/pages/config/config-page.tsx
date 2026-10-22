@@ -20,6 +20,7 @@ import { ToolsBrowserSection } from "./sections/tools-browser-section";
 import { ToolsExecSection } from "./sections/tools-exec-section";
 import { ShellSecuritySection } from "./sections/shell-security-section";
 import { TtsSection } from "./sections/tts-section";
+import { SttSection } from "./sections/stt-section";
 import { CronSection } from "./sections/cron-section";
 import { TelemetrySection } from "./sections/telemetry-section";
 import { BindingsSection } from "./sections/bindings-section";
@@ -166,6 +167,11 @@ export function ConfigPage() {
 
         <TabsContent value="integrations" className="space-y-4">
           <TtsSection data={config.tts as any} />
+          <SttSection
+            data={config.audio as any}
+            onSave={(v) => patch({ audio: v })}
+            saving={saving}
+          />
           <CronSection
             data={config.cron as any}
             onSave={(v) => patch({ cron: v })}

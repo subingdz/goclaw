@@ -77,11 +77,11 @@ func (m *Manager) MaybeApply(ctx context.Context, text, channel string, isVoiceI
 	var agentGenericTTSParams map[string]any
 	if snap, ok := store.AgentAudioFromCtx(ctx); ok && len(snap.OtherConfig) > 0 {
 		var agentCfg struct {
-			TTSVoiceID string         `json:"tts_voice_id,omitempty"`
-			TTSModelID string         `json:"tts_model_id,omitempty"`
+			TTSVoiceID string `json:"tts_voice_id,omitempty"`
+			TTSModelID string `json:"tts_model_id,omitempty"`
 			// TTSParams carries per-agent generic override keys (speed, emotion, style).
 			// Must be adapted PER-ATTEMPT via AdaptAgentParams (Finding #1 CRITICAL).
-			TTSParams  map[string]any `json:"tts_params,omitempty"`
+			TTSParams map[string]any `json:"tts_params,omitempty"`
 		}
 		if err := json.Unmarshal(snap.OtherConfig, &agentCfg); err == nil {
 			if agentCfg.TTSVoiceID != "" {

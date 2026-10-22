@@ -195,24 +195,17 @@
     },
     "sttForm": {
       "title": "Cài đặt STT",
-      "description": "Cấu hình nhà cung cấp chuyển giọng nói thành văn bản cho tin nhắn thoại.",
-      "providersLabel": "Nhà cung cấp",
+      "description": "WhatsApp quyết định theo từng tin nhắn có gửi âm thanh đi chuyển ngữ hay không. Còn nền tảng chuyển ngữ được cấu hình ở nơi khác.",
       "providersPlaceholder": "Chọn nhà cung cấp",
-      "elevenlabsSectionTitle": "ElevenLabs",
-      "elevenlabsApiKeyLabel": "API Key",
-      "elevenlabsDefaultLanguageLabel": "Ngôn ngữ mặc định",
-      "proxySectionTitle": "Proxy",
-      "proxyUrlLabel": "URL Proxy",
-      "proxyApiKeyLabel": "API Key Proxy",
-      "proxyTenantIdLabel": "Tenant ID Proxy",
       "whatsappEnabledLabel": "Bật STT cho WhatsApp",
       "whatsappPrivacyWarning": "Bật STT cho WhatsApp sẽ phá vỡ mã hóa đầu cuối cho tin nhắn thoại gửi đến agent này.",
-      "providersRequiredError": "Phải chọn ít nhất một nhà cung cấp.",
       "cancel": "Hủy",
       "save": "Lưu",
       "saving": "Đang lưu...",
       "saveSuccess": "Đã lưu cài đặt STT",
-      "saveFailed": "Lưu cài đặt STT thất bại"
+      "saveFailed": "Lưu cài đặt STT thất bại",
+      "backendNote": "Nền tảng (provider, base URL, model, API key, SILK decoder) nằm ở Config → Integrations → Speech-to-Text — các trường từng có trong hộp thoại này không code nào đọc.",
+      "backendLink": "Mở cài đặt Speech-to-Text"
     },
     "extractorChain": {
       "title": "Web Fetch — Chuỗi bộ trích xuất",
@@ -250,7 +243,13 @@
       "imageModelFlareOption": "Mặc định · gpt-image-2.5-flare (khuyến nghị)",
       "imageModelSunburstOption": "Chính xác · gpt-image-2.5-sunburst",
       "imageModelPreviousOption": "Đời trước · gpt-image-2",
-      "imageModelLegacyOption": "Cũ · gpt-image-1.5"
+      "imageModelLegacyOption": "Cũ · gpt-image-1.5",
+      "sizeLabel": "Kích thước (OpenAI / Zhipu)",
+      "imageSizeLabel": "Kích thước ảnh (SiliconFlow)",
+      "responseFormatLabel": "Định dạng phản hồi",
+      "responseFormatB64": "Base64 (mặc định)",
+      "responseFormatURL": "URL (gateway sẽ tải về)",
+      "responseFormatOff": "Không gửi tham số này"
     },
     "toast": {
       "toggled": "Đã cập nhật công cụ",

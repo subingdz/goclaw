@@ -59,9 +59,12 @@ type sttResponse struct {
 // TranscribeAudio calls the configured STT proxy service with the given audio file
 // and returns the transcribed text. Returns ("", nil) silently when:
 //   - cfg.ProxyURL is empty (STT not configured), or
-//   - filePath is empty (download failed earlier in the pipeline).
+//   - filePath is empty (nothing was downloaded in the first place).
 //
-// Any HTTP or parse error is returned so the caller can log and fall back gracefully.
+// The empty-path silence is deliberate, not an oversight: with no payload, every other provider
+// in the chain would be handed the same nothing, so an error there would only turn a missing file
+// into a warning stream. A path that is set but unreadable *is* an error, and the chain does fall
+// through in that case. Any HTTP or parse error is returned so the caller can log and fall back.
 func TranscribeAudio(ctx context.Context, cfg STTConfig, filePath string) (string, error) {
 	if cfg.ProxyURL == "" || filePath == "" {
 		return "", nil

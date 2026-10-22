@@ -80,8 +80,8 @@ type voiceGetRequest struct {
 
 // voiceGetResponse mirrors the MiniMax /v1/get_voice response envelope.
 type voiceGetResponse struct {
-	SystemVoice    []voiceEntry `json:"system_voice"`
-	VoiceCloning   []voiceEntry `json:"voice_cloning"`
+	SystemVoice     []voiceEntry `json:"system_voice"`
+	VoiceCloning    []voiceEntry `json:"voice_cloning"`
 	VoiceGeneration []voiceEntry `json:"voice_generation"`
 }
 

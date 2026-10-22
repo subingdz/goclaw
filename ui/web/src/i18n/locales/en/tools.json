@@ -195,24 +195,17 @@
     },
     "sttForm": {
       "title": "STT Settings",
-      "description": "Configure speech-to-text providers for transcribing voice messages.",
-      "providersLabel": "Providers",
+      "description": "WhatsApp decides per message whether its voice notes are sent for transcription. The transcription backend itself is configured elsewhere.",
       "providersPlaceholder": "Select providers",
-      "elevenlabsSectionTitle": "ElevenLabs",
-      "elevenlabsApiKeyLabel": "API Key",
-      "elevenlabsDefaultLanguageLabel": "Default Language",
-      "proxySectionTitle": "Proxy",
-      "proxyUrlLabel": "Proxy URL",
-      "proxyApiKeyLabel": "Proxy API Key",
-      "proxyTenantIdLabel": "Proxy Tenant ID",
       "whatsappEnabledLabel": "Enable STT for WhatsApp",
       "whatsappPrivacyWarning": "Enabling STT for WhatsApp breaks end-to-end encryption for voice messages sent to this agent.",
-      "providersRequiredError": "At least one provider must be selected.",
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving...",
       "saveSuccess": "STT settings saved",
-      "saveFailed": "Failed to save STT settings"
+      "saveFailed": "Failed to save STT settings",
+      "backendNote": "The backend (provider, base URL, model, API key, SILK decoder) lives under Config → Integrations → Speech-to-Text — the fields that used to be in this dialog were never read.",
+      "backendLink": "Open the Speech-to-Text settings"
     },
     "extractorChain": {
       "title": "Web Fetch — Extractor Chain",
@@ -250,7 +243,13 @@
       "imageModelFlareOption": "Default · gpt-image-2.5-flare (recommended)",
       "imageModelSunburstOption": "Precise · gpt-image-2.5-sunburst",
       "imageModelPreviousOption": "Previous · gpt-image-2",
-      "imageModelLegacyOption": "Legacy · gpt-image-1.5"
+      "imageModelLegacyOption": "Legacy · gpt-image-1.5",
+      "sizeLabel": "Size (OpenAI / Zhipu)",
+      "imageSizeLabel": "Image size (SiliconFlow)",
+      "responseFormatLabel": "Response format",
+      "responseFormatB64": "Base64 (default)",
+      "responseFormatURL": "URL (gateway downloads it)",
+      "responseFormatOff": "Omit the parameter"
     },
     "toast": {
       "toggled": "Tool updated",

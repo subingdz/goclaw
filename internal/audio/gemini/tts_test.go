@@ -507,9 +507,9 @@ func TestIsTextOnlyError(t *testing.T) {
 		{400, `{"error":{"message":"unable to generate text in format"}}`, false}, // bare "generate text" not in list
 		{400, `{"error":{"message":"rate limit"}}`, false},
 		{400, `{"error":{"message":"invalid voice"}}`, false},
-		{400, `not-json`, false}, // no substring match
+		{400, `not-json`, false},                              // no substring match
 		{500, `{"error":{"message":"returned text"}}`, false}, // only 400
-		{400, ``, false},                                       // empty
+		{400, ``, false},                                      // empty
 		{400, `{"error":{"message":"text-only output detected"}}`, true},
 		{400, `{"error":{"message":"text output returned"}}`, true},
 	}

@@ -16,6 +16,23 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Speech-to-text on inbound voice messages** — `audio.stt` is now the real
+  surface: `provider` (`openai_compat` | `elevenlabs` | `proxy`) plus
+  `base_url` / `model` / `language` / `fallback` / `timeout_ms`, with
+  `audio.stt.api_key` stored as a secret (`config_secrets`, or
+  `GOCLAW_AUDIO_STT_API_KEY`, which wins) and never written to config.json. A
+  channel transcribes only when a usable backend exists (`STTAvailable`), so an
+  unconfigured gateway says so once at Debug per message instead of failing or
+  spamming warnings. Feishu, Telegram, Discord and WhatsApp (opt-in, because of
+  end-to-end encryption) go through `audio.Manager`; the panel gets a
+  Speech-to-Text card under Config → Integrations. Providers are built after the
+  config overlay, so a panel-set backend actually registers — and changing it
+  still needs a restart. QQ and WeChat voice arrive as SILK: there is no pure-Go
+  decoder, so the gateway looks for a host `silk_v3_decoder`, `silk_decoder` or
+  `ffmpeg` (`audio.stt.silk_decoder` pins one, `off` disables the search) and
+  says at startup whether it found one.
+
+
 - **Embedding vector width is deployment-configurable** — the truth is the
   database's own column width (`store.EmbeddingSchemaReader`), read at startup,
   not a hard-coded constant. `goclaw migrate embed-dims --to N` re-dimensions
@@ -103,6 +120,35 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   for provider-first model selection.
 
 ### Fixed
+
+- **Speech-to-text: the configured timeout, the provider roles, and two dialogs that
+  configured nothing** — `audio.stt.timeout_ms` is now the per-transcription deadline
+  (`Manager.STTTimeout(fallback)`); every channel had hard-coded 10 s, so raising it to 30 s — which
+  is exactly what a long voice note needs — changed nothing, and the SILK decoder's own 15 s ceiling
+  could never be reached. The startup chain log said `role=primary` for every provider because the
+  role was read *after* the entry was appended to the chain, so a configured `fallback` was invisible
+  in the log. Telegram was the one channel that did not check `STTAvailable`, so a gateway with no
+  STT backend logged a warning per voice message instead of the documented single Debug line. The
+  `proxy` provider accepted a model and a language hint and dropped them in silence (its protocol
+  carries neither) — it now says so.
+  **Two panels were decoys.** Built-in tools → stt → Settings saved a provider list, an ElevenLabs
+  key and a proxy URL into `builtin_tools[stt].settings`, of which the only key anything reads is
+  `whatsapp_enabled`: a user could configure speech recognition there and nothing would ever be
+  transcribed. The desktop dialog now edits `audio.stt` itself over the same `config.get` /
+  `config.patch` methods the web card uses (desktop has no Integrations screen, and channels *do* run
+  in the desktop build), and the web dialog keeps the WhatsApp opt-in with a link to the real card.
+  The nine dead locale entries were removed from the web tree and replaced with the pointer copy.
+  `audio.stt.silk_decoder` is seeded into `system_configs` like the rest of the STT keys.
+  Documentation corrected against the code: `docs/05` still claimed four channels transcribe and that
+  "QQ drops inbound attachments", and its capability matrix still said QQ/WeChat cannot send media —
+  all three contradicted what shipped this week. And the SILK story said the search order falls back
+  to `ffmpeg`: **ffmpeg cannot decode SILK and the decoder only runs on payloads that sniff as SILK**,
+  so a board with ffmpeg alone reports "decoder available" and then fails every voice note — the
+  comment, the docs and the installation walkthrough now say so plainly. One investigated-and-reverted
+  change: an empty audio path returning `("", nil)` looked like a swallowed error, but it is a
+  deliberate no-op (another provider handed the same nothing would fail identically and only add log
+  noise), so it is now covered by tests in `internal/channels/media` instead of being altered.
+
 
 - **Channel reload no longer hangs after a failed channel start (#1627)** —
   `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`

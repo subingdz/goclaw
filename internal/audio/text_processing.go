@@ -4,14 +4,14 @@ import "regexp"
 
 // Pre-compiled regexes for performance (called per stream chunk).
 var (
-	mdFencedCodeRe = regexp.MustCompile("(?s)```[^`]*```")
-	mdInlineCodeRe = regexp.MustCompile("`([^`]+)`")
-	mdBoldStarRe   = regexp.MustCompile(`\*\*([^*]+)\*\*`)
-	mdItalicStarRe = regexp.MustCompile(`\*([^*]+)\*`)
-	mdBoldUnderRe  = regexp.MustCompile(`__([^_]+)__`)
+	mdFencedCodeRe  = regexp.MustCompile("(?s)```[^`]*```")
+	mdInlineCodeRe  = regexp.MustCompile("`([^`]+)`")
+	mdBoldStarRe    = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	mdItalicStarRe  = regexp.MustCompile(`\*([^*]+)\*`)
+	mdBoldUnderRe   = regexp.MustCompile(`__([^_]+)__`)
 	mdItalicUnderRe = regexp.MustCompile(`_([^_]+)_`)
-	mdLinkRe       = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
-	mdHeadingRe    = regexp.MustCompile(`(?m)^#+\s+`)
+	mdLinkRe        = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+	mdHeadingRe     = regexp.MustCompile(`(?m)^#+\s+`)
 
 	ttsTextBlockRe  = regexp.MustCompile(`(?s)\[\[tts:text\]\](.*?)\[\[/tts:text\]\]`)
 	ttsVoiceBlockRe = regexp.MustCompile(`(?s)\[\[tts\]\].*?\[\[/tts\]\]`)

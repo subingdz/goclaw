@@ -405,6 +405,16 @@ func runGateway() {
 		applyUserAllowedPaths(toolsReg, paths)
 		slog.Info("filesystem allowed paths reapplied from system_configs", "paths", len(paths))
 	}
+
+	// STT providers were built inside setupToolRegistry above, before ApplySystemConfigs
+	// overlaid audio.stt.* from the DB — so a backend configured in the panel would never
+	// have registered. Re-run now that cfg carries the DB values. Safe: the server has not
+	// started, and no channel is transcribing yet.
+	if audioMgr != nil {
+		registerSTTProviders(cfg, audioMgr, cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL)
+		attachSILKDecoder(cfg, audioMgr)
+	}
+
 	// MCP servers: load from database (single source of truth).
 	// pgStores.MCP is nil on SQLite/desktop builds that don't support MCP tables.
 	// Apply store to MCP manager so ListToolsForAgent can query DB.

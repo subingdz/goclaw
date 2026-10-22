@@ -4,90 +4,156 @@ import { I18nextProvider } from 'react-i18next'
 import i18n from '../../../i18n'
 import { SttProviderForm } from '../stt-provider-form'
 
-// Mock getApiClient (not called directly by form, but hooks import it)
-vi.mock('../../../lib/api', () => ({
-  getApiClient: () => ({
-    get: vi.fn().mockResolvedValue({ voices: [] }),
-    post: vi.fn().mockResolvedValue({ status: 'ok' }),
-    put: vi.fn().mockResolvedValue({}),
+// The dialog must edit audio.stt — the surface the gateway reads when it builds the STT chain —
+// and not the tool settings blob, which used to hold a provider list and two API keys that no
+// code ever consulted. whatsapp_enabled is the one key that still belongs to the tool.
+
+interface PatchCall {
+  method: string
+  params?: Record<string, unknown>
+}
+
+let calls: PatchCall[] = []
+let configResponse: unknown = {
+  config: {
+    audio: {
+      stt: {
+        provider: 'openai_compat',
+        base_url: 'https://api.siliconflow.cn/v1',
+        model: 'FunAudioLLM/SenseVoiceSmall',
+        language: 'vi',
+        fallback: '',
+        timeout_ms: 30000,
+        silk_decoder: '',
+        api_key: '***abc123',
+      },
+    },
+  },
+  hash: 'hash-1',
+}
+
+vi.mock('../../../lib/ws', () => ({
+  getWsClient: () => ({
+    call: vi.fn(async (method: string, params?: Record<string, unknown>) => {
+      calls.push({ method, params })
+      if (method === 'config.get') return configResponse
+      return { ok: true }
+    }),
+    on: vi.fn(() => () => {}),
   }),
 }))
 
 function renderForm(
   onSave = vi.fn().mockResolvedValue(undefined),
-  onCancel = vi.fn(),
   initialSettings: Record<string, unknown> = {},
 ) {
+  // The suite runs with the browser's locale otherwise, which makes the button names move
+  // between languages; these tests click by label.
+  i18n.changeLanguage('en')
   return render(
     <I18nextProvider i18n={i18n}>
       <SttProviderForm
         initialSettings={initialSettings}
         onSave={onSave}
-        onCancel={onCancel}
+        onCancel={vi.fn()}
       />
     </I18nextProvider>,
-  )
+  );
 }
 
-describe('SttProviderForm (desktop)', () => {
+function lastPatch(): Record<string, unknown> | undefined {
+  const patch = [...calls].reverse().find((c) => c.method === 'config.patch')
+  return patch?.params
+}
+
+function patchedStt(params?: Record<string, unknown>) {
+  const raw = JSON.parse((params?.raw as string) ?? '{}')
+  return raw?.audio?.stt as Record<string, unknown>
+}
+
+describe('SttProviderForm (desktop, audio.stt)', () => {
   beforeEach(() => {
+    calls = []
+    configResponse = {
+      config: {
+        audio: {
+          stt: {
+            provider: 'openai_compat',
+            base_url: 'https://api.siliconflow.cn/v1',
+            model: 'FunAudioLLM/SenseVoiceSmall',
+            language: 'vi',
+            fallback: '',
+            timeout_ms: 30000,
+            silk_decoder: '',
+            api_key: '***abc123',
+          },
+        },
+      },
+      hash: 'hash-1',
+    }
     vi.clearAllMocks()
   })
 
-  it('(a) renders all fields including whatsapp_enabled toggle', () => {
+  it('loads the real audio.stt values into the form', async () => {
     renderForm()
+    await waitFor(() => expect(calls.some((c) => c.method === 'config.get')).toBe(true))
 
-    // Provider checkboxes
-    expect(screen.getByRole('checkbox', { name: /elevenlabs/i })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /proxy/i })).toBeInTheDocument()
-
-    // ElevenLabs fields
-    expect(screen.getByPlaceholderText('xi-...')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('en')).toBeInTheDocument()
-
-    // Proxy fields
-    expect(screen.getByPlaceholderText('https://...')).toBeInTheDocument()
-
-    // WhatsApp toggle
-    expect(screen.getByRole('checkbox', { name: /whatsapp/i })).toBeInTheDocument()
+    const provider = (await screen.findByTestId('stt-provider')) as HTMLSelectElement
+    const baseUrl = (await screen.findByTestId('stt-base-url')) as HTMLInputElement
+    expect(provider.value).toBe('openai_compat')
+    expect(baseUrl.value).toBe('https://api.siliconflow.cn/v1')
   })
 
-  it('(b) privacy banner renders above the whatsapp toggle', () => {
+  it('drops the dead fields: no provider checkboxes, no proxy tenant id', async () => {
     renderForm()
-
-    const banner = screen.getByTestId('whatsapp-privacy-banner')
-    const toggle = screen.getByRole('checkbox', { name: /whatsapp/i })
-
-    expect(banner).toBeInTheDocument()
-    // Banner should appear before toggle in DOM order
-    expect(
-      banner.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    await screen.findByTestId('stt-base-url')
+    expect(screen.queryByPlaceholderText('xi-...')).toBeNull()
+    expect(screen.queryByPlaceholderText('https://...')).toBeNull()
+    expect(screen.queryByLabelText(/tenant id/i)).toBeNull()
   })
 
-  it('(c) submits via onSave with correct payload shape', async () => {
+  it('saves audio.stt through config.patch and only whatsapp_enabled through the tool settings', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
-    renderForm(onSave, vi.fn(), {
-      providers: ['elevenlabs'],
-      elevenlabs: { api_key: 'xi-test', default_language: 'vi' },
-      proxy: { url: '', api_key: '', tenant_id: '' },
-      whatsapp_enabled: false,
-    })
+    renderForm(onSave, { whatsapp_enabled: false, providers: ['elevenlabs'] })
+    await screen.findByTestId('stt-base-url')
 
-    // Toggle whatsapp on
-    const whatsappToggle = screen.getByRole('checkbox', { name: /whatsapp/i })
-    fireEvent.click(whatsappToggle)
+    fireEvent.click(screen.getByRole('checkbox', { name: /whatsapp/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save|保存|сохранить/i }))
 
-    // Click Save
-    fireEvent.click(screen.getByRole('button', { name: /^save$|^lưu$|^保存$/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const payload = lastPatch()
+    expect(payload).toBeTruthy()
+    expect(payload?.baseHash).toBe('hash-1')
+    expect(patchedStt(payload).provider).toBe('openai_compat')
+    expect(patchedStt(payload).timeout_ms).toBe(30000)
 
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledTimes(1)
-    })
+    // The masked key must never be echoed back: writing the mask would store it as the key.
+    expect(patchedStt(payload).api_key).toBeUndefined()
 
-    const payload = onSave.mock.calls[0][0] as Record<string, unknown>
-    expect(payload.whatsapp_enabled).toBe(true)
-    expect((payload.elevenlabs as Record<string, string>).api_key).toBe('xi-test')
-    expect(Array.isArray(payload.providers)).toBe(true)
+    // The tool settings keep exactly the one key the chain consults per message.
+    expect(onSave).toHaveBeenCalledWith(
+      expect.not.objectContaining({ providers: expect.anything() }),
+    )
+    expect(onSave.mock.calls[0][0]).toEqual({ whatsapp_enabled: true })
+  })
+
+  it('sends a typed API key, and refuses a provider without a base URL', async () => {
+    renderForm()
+    await screen.findByTestId('stt-base-url')
+
+    const baseUrl = (await screen.findByTestId('stt-base-url')) as HTMLInputElement
+    fireEvent.change(baseUrl, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /save|保存/i }))
+
+    expect(await screen.findByTestId('stt-form-error')).toBeTruthy()
+    expect(calls.some((c) => c.method === 'config.patch')).toBe(false)
+
+    fireEvent.change(baseUrl, { target: { value: 'https://api.siliconflow.cn/v1' } })
+    const apiKey = (await screen.findByTestId('stt-api-key')) as HTMLInputElement
+    fireEvent.change(apiKey, { target: { value: 'sk-new' } })
+    fireEvent.click(screen.getByRole('button', { name: /save|保存/i }))
+
+    await waitFor(() => expect(calls.some((c) => c.method === 'config.patch')).toBe(true))
+    expect(patchedStt(lastPatch()).api_key).toBe('sk-new')
   })
 })

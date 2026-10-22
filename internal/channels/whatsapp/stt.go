@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 )
 
@@ -53,8 +54,14 @@ func (c *Channel) transcribeVoice(ctx context.Context, filePath, mimeType, local
 	if c.audioMgr == nil {
 		return fallback
 	}
-	sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	if !c.audioMgr.STTAvailable(ctx) {
+		slog.Debug("whatsapp: no STT provider available, leaving voice untranscribed")
+		return fallback
+	}
+	sttCtx, cancel := context.WithTimeout(ctx, c.audioMgr.STTTimeout(10*time.Second))
 	defer cancel()
+	// The legacy proxy override map is keyed by platform, not by instance name.
+	sttCtx = audio.WithChannel(sttCtx, channels.TypeWhatsApp)
 	res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: filePath, MimeType: mimeType}, audio.STTOptions{})
 	if err != nil || res == nil {
 		slog.Warn("whatsapp: stt failed or timed out", "error", err, "file", filePath)

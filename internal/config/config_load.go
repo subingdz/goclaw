@@ -209,6 +209,14 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_TTS_MINIMAX_API_KEY", &c.Tts.MiniMax.APIKey)
 	envStr("GOCLAW_TTS_MINIMAX_GROUP_ID", &c.Tts.MiniMax.GroupID)
 
+	// STT secret — highest precedence, as every secret here (config.json → DB
+	// secrets → env). Only the key travels by env; the endpoint is ordinary config.
+	// Assigned conditionally: envStr's argument would allocate the optional audio block even
+	// when no variable is set, and an empty "audio": {"stt": {}} would land in config.json.
+	if v := os.Getenv("GOCLAW_AUDIO_STT_API_KEY"); v != "" {
+		c.ensureAudioSTT().APIKey = v
+	}
+
 	// Auto-enable channels if credentials are provided via env
 	if c.Channels.Telegram.Token != "" {
 		c.Channels.Telegram.Enabled = true

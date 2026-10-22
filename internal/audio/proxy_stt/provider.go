@@ -5,6 +5,7 @@ package proxy_stt
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,15 @@ func (p *Provider) Name() string { return "proxy" }
 // Transcribe delegates to media.TranscribeAudio. When in.FilePath is empty but
 // in.Bytes is present, writes a 0600 temp file and defers cleanup.
 // Returns ("", nil) when proxy URL is empty or filePath is empty (proxy no-op).
-func (p *Provider) Transcribe(ctx context.Context, in audio.STTInput, _ audio.STTOptions) (*audio.TranscriptResult, error) {
+//
+// The proxy contract is a file in, a {"transcript": ...} out. It has no field for a model id or a
+// language hint, so per-call options cannot be honored here — saying so at Debug beats accepting
+// them and dropping them without a trace. See docs/05-channels-messaging.md, STT section.
+func (p *Provider) Transcribe(ctx context.Context, in audio.STTInput, opts audio.STTOptions) (*audio.TranscriptResult, error) {
+	if opts.Language != "" || opts.ModelID != "" {
+		slog.Debug("proxy_stt: the proxy contract carries no model or language field, ignoring per-call options",
+			"language", opts.Language, "model", opts.ModelID)
+	}
 	filePath := in.FilePath
 
 	if filePath == "" && len(in.Bytes) > 0 {

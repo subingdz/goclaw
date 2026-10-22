@@ -43,6 +43,8 @@ type Manager struct {
 
 	primary             string              // primary TTS provider
 	sttChain            []string            // STT fallback order (Phase 4)
+	sttDefaults         STTOptions          // model/language/timeout channels don't know (Phase 4)
+	silk                *SILKDecoder        // external SILK→WAV tool, nil = pass through
 	musicChain          []string            // Music fallback order (Phase 3)
 	channelSTTOverrides map[string][]string // channel → provider key list (Phase 4)
 

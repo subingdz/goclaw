@@ -63,6 +63,11 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Tts.ElevenLabs.APIKey)
 	maskNonEmpty(&cp.Tts.MiniMax.APIKey)
 
+	// Mask STT API key (audio.stt)
+	if cp.Audio != nil && cp.Audio.Stt != nil {
+		maskNonEmpty(&cp.Audio.Stt.APIKey)
+	}
+
 	// Mask Tailscale auth key
 	maskNonEmpty(&cp.Tailscale.AuthKey)
 
@@ -114,6 +119,11 @@ func (c *Config) StripSecrets() {
 	c.Tts.OpenAI.APIKey = ""
 	c.Tts.ElevenLabs.APIKey = ""
 	c.Tts.MiniMax.APIKey = ""
+
+	// STT API key — the disk copy must never carry it, same as every other secret
+	if c.Audio != nil && c.Audio.Stt != nil {
+		c.Audio.Stt.APIKey = ""
+	}
 
 	// Tailscale auth key
 	c.Tailscale.AuthKey = ""
@@ -172,6 +182,11 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Tts.ElevenLabs.APIKey)
 	stripIfMasked(&c.Tts.MiniMax.APIKey)
 
+	// STT API key
+	if c.Audio != nil && c.Audio.Stt != nil {
+		stripIfMasked(&c.Audio.Stt.APIKey)
+	}
+
 	// Tailscale auth key
 	stripIfMasked(&c.Tailscale.AuthKey)
 }
@@ -193,6 +208,12 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 	apply("tts.minimax.api_key", &c.Tts.MiniMax.APIKey)
 	apply("tts.minimax.group_id", &c.Tts.MiniMax.GroupID)
 	apply("tailscale.auth_key", &c.Tailscale.AuthKey)
+
+	// STT: the stored secret is authoritative even when config.json never had an
+	// audio block, so this cannot go through the apply() helper's field pointers.
+	if v, ok := secrets["audio.stt.api_key"]; ok && v != "" {
+		c.ensureAudioSTT().APIKey = v
+	}
 }
 
 // ExtractDBSecrets returns the config_secrets key-value pairs from the config.
@@ -213,6 +234,10 @@ func (c *Config) ExtractDBSecrets() map[string]string {
 	collect("tts.minimax.api_key", c.Tts.MiniMax.APIKey)
 	collect("tts.minimax.group_id", c.Tts.MiniMax.GroupID)
 	collect("tailscale.auth_key", c.Tailscale.AuthKey)
+
+	if c.Audio != nil && c.Audio.Stt != nil {
+		collect("audio.stt.api_key", c.Audio.Stt.APIKey)
+	}
 
 	return secrets
 }

@@ -157,11 +157,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 	for i := range mediaList {
 		m := &mediaList[i]
 		if m.Type == media.TypeAudio || m.Type == media.TypeVoice {
-			mimeType := m.ContentType
-			if mimeType == "" {
-				mimeType = "audio/ogg"
-			}
-			m.Transcript = c.transcribeVoice(ctx, m.FilePath, mimeType, locale, waSttSettings)
+			m.Transcript = c.transcribeVoice(ctx, m.FilePath, media.AudioSTTMime(m.ContentType, "audio/ogg"), locale, waSttSettings)
 		}
 	}
 

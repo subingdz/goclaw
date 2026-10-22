@@ -128,9 +128,18 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			case media.TypeAudio, media.TypeVoice:
 				var transcript string
 				var sttErr error
-				if c.audioMgr != nil {
-					sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: mi.FilePath, MimeType: "audio/ogg"}, audio.STTOptions{})
+				if c.audioMgr == nil || !c.audioMgr.STTAvailable(ctx) {
+					slog.Debug("discord: no STT provider available, leaving voice untranscribed", "type", mi.Type)
+				} else {
+					sttCtx, cancel := context.WithTimeout(ctx, c.audioMgr.STTTimeout(10*time.Second))
+					// Keyed by platform, not instance name: that is how the legacy
+					// per-channel proxy overrides are registered.
+					sttCtx = audio.WithChannel(sttCtx, channels.TypeDiscord)
+					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{
+						FilePath: mi.FilePath,
+						MimeType: media.AudioSTTMime(mi.ContentType, "audio/ogg"),
+						Filename: mi.FileName,
+					}, audio.STTOptions{})
 					cancel()
 					if err == nil && res != nil {
 						transcript = res.Text

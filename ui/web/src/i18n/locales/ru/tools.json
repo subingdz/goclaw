@@ -194,24 +194,17 @@
     },
     "sttForm": {
       "title": "Настройки STT",
-      "description": "Настройте провайдеров распознавания речи для транскрибации голосовых сообщений.",
-      "providersLabel": "Провайдеры",
+      "description": "WhatsApp решает для каждого сообщения, отправлять ли голосовое на транскрибацию. Сам бэкенд настраивается в другом месте.",
       "providersPlaceholder": "Выберите провайдеров",
-      "elevenlabsSectionTitle": "ElevenLabs",
-      "elevenlabsApiKeyLabel": "Ключ API",
-      "elevenlabsDefaultLanguageLabel": "Язык по умолчанию",
-      "proxySectionTitle": "Прокси",
-      "proxyUrlLabel": "URL прокси",
-      "proxyApiKeyLabel": "Ключ API прокси",
-      "proxyTenantIdLabel": "ID арендатора прокси",
       "whatsappEnabledLabel": "Включить STT для WhatsApp",
       "whatsappPrivacyWarning": "Включение STT для WhatsApp нарушает сквозное шифрование голосовых сообщений, отправляемых этому агенту.",
-      "providersRequiredError": "Должен быть выбран хотя бы один провайдер.",
       "cancel": "Отмена",
       "save": "Сохранить",
       "saving": "Сохранение...",
       "saveSuccess": "Настройки STT сохранены",
-      "saveFailed": "Не удалось сохранить настройки STT"
+      "saveFailed": "Не удалось сохранить настройки STT",
+      "backendNote": "Бэкенд (провайдер, base URL, модель, API-ключ, SILK-декодер) настраивается в Config → Integrations → Speech-to-Text — поля, что были в этом окне, никто не читал.",
+      "backendLink": "Открыть настройки Speech-to-Text"
     },
     "extractorChain": {
       "title": "Веб-загрузка — цепочка извлечения",
@@ -249,7 +242,13 @@
       "imageModelFlareOption": "По умолчанию · gpt-image-2.5-flare (рекомендуется)",
       "imageModelSunburstOption": "Точная · gpt-image-2.5-sunburst",
       "imageModelPreviousOption": "Предыдущая · gpt-image-2",
-      "imageModelLegacyOption": "Устаревшая · gpt-image-1.5"
+      "imageModelLegacyOption": "Устаревшая · gpt-image-1.5",
+      "sizeLabel": "Размер (OpenAI / Zhipu)",
+      "imageSizeLabel": "Размер изображения (SiliconFlow)",
+      "responseFormatLabel": "Формат ответа",
+      "responseFormatB64": "Base64 (по умолчанию)",
+      "responseFormatURL": "URL (шлюз скачает сам)",
+      "responseFormatOff": "Не отправлять параметр"
     },
     "toast": {
       "toggled": "Инструмент обновлён",

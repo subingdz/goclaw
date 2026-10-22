@@ -172,6 +172,40 @@ func TestBuildMediaTags_UnknownType(t *testing.T) {
 	}
 }
 
+// A gateway that never configured speech recognition must not answer every voice message with
+// a Warn. The channel gates on STTAvailable the way the other five do, so an unconfigured
+// Manager leaves here before any provider call and therefore before any error to log.
+func TestTranscribeMediaAudioSkipsWhenNoSTTBackend(t *testing.T) {
+	cases := []struct {
+		name string
+		mgr  *audio.Manager
+	}{
+		{"no manager at all", nil},
+		{"manager with an empty chain", audio.NewManager(audio.ManagerConfig{})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := &Channel{
+				BaseChannel: channels.NewBaseChannel("telegram-main", nil, nil),
+				audioMgr:    tc.mgr,
+			}
+			ch.SetType(channels.TypeTelegram)
+
+			got, err := ch.transcribeMediaAudio(context.Background(), MediaInfo{
+				Type:     "voice",
+				FilePath: "/tmp/voice.ogg",
+				FileName: "voice.ogg",
+			})
+			if err != nil {
+				t.Fatalf("transcribeMediaAudio() error = %v, want the missing backend to be a skip, not a failure", err)
+			}
+			if got != "" {
+				t.Fatalf("transcript = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestTranscribeMediaAudioUsesChannelTypeAndPreservesMIME(t *testing.T) {
 	mgr := audio.NewManager(audio.ManagerConfig{})
 	tenantSTT := &telegramTestSTT{name: "tenant"}

@@ -109,24 +109,17 @@
     },
     "sttForm": {
       "title": "STT 设置",
-      "description": "配置语音转文字 Provider，用于转录语音消息。",
-      "providersLabel": "Provider",
+      "description": "WhatsApp 按消息决定是否把语音送去转写。转写后端本身在别处配置。",
       "providersPlaceholder": "选择 Provider",
-      "elevenlabsSectionTitle": "ElevenLabs",
-      "elevenlabsApiKeyLabel": "API Key",
-      "elevenlabsDefaultLanguageLabel": "默认语言",
-      "proxySectionTitle": "代理",
-      "proxyUrlLabel": "代理 URL",
-      "proxyApiKeyLabel": "代理 API Key",
-      "proxyTenantIdLabel": "代理租户 ID",
       "whatsappEnabledLabel": "为 WhatsApp 启用 STT",
       "whatsappPrivacyWarning": "为 WhatsApp 启用 STT 将破坏发送给此 Agent 的语音消息的端对端加密。",
-      "providersRequiredError": "至少需要选择一个 Provider。",
       "cancel": "取消",
       "save": "保存",
       "saving": "保存中...",
       "saveSuccess": "STT 设置已保存",
-      "saveFailed": "保存 STT 设置失败"
+      "saveFailed": "保存 STT 设置失败",
+      "backendNote": "后端（Provider、Base URL、模型、API Key、SILK 解码器）在 配置 → Integrations → 语音转文字 里设置 —— 这个对话框里原来的那些字段没有任何代码读取。",
+      "backendLink": "打开语音转文字设置"
     },
     "extractorChain": {
       "title": "Web Fetch — 提取器链",
@@ -164,7 +157,13 @@
       "imageModelFlareOption": "默认 · gpt-image-2.5-flare（推荐）",
       "imageModelSunburstOption": "精细 · gpt-image-2.5-sunburst",
       "imageModelPreviousOption": "上一代 · gpt-image-2",
-      "imageModelLegacyOption": "旧版 · gpt-image-1.5"
+      "imageModelLegacyOption": "旧版 · gpt-image-1.5",
+      "sizeLabel": "尺寸（OpenAI / 智谱）",
+      "imageSizeLabel": "图像尺寸（硅基流动）",
+      "responseFormatLabel": "响应格式",
+      "responseFormatB64": "Base64（默认）",
+      "responseFormatURL": "URL（由网关下载）",
+      "responseFormatOff": "不发送该参数"
     },
     "noMatchDescription": "请尝试其他搜索词。",
     "noMatchTitle": "未找到匹配工具",

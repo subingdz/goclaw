@@ -176,7 +176,13 @@
       "imageModelFlareOption": "기본 · gpt-image-2.5-flare (권장)",
       "imageModelSunburstOption": "정밀 · gpt-image-2.5-sunburst",
       "imageModelPreviousOption": "이전 · gpt-image-2",
-      "imageModelLegacyOption": "레거시 · gpt-image-1.5"
+      "imageModelLegacyOption": "레거시 · gpt-image-1.5",
+      "sizeLabel": "크기 (OpenAI / Zhipu)",
+      "imageSizeLabel": "이미지 크기 (SiliconFlow)",
+      "responseFormatLabel": "응답 형식",
+      "responseFormatB64": "Base64 (기본)",
+      "responseFormatURL": "URL (게이트웨이가 다운로드)",
+      "responseFormatOff": "이 매개변수 보내지 않기"
     },
     "toast": {
       "toggled": "도구 업데이트됨",

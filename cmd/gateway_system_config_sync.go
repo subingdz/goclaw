@@ -137,6 +137,21 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setInt("tts.max_length", cfg.Tts.MaxLength)
 	setInt("tts.timeout_ms", cfg.Tts.TimeoutMs)
 
+	// STT (audio.stt). api_key is not seeded: system_configs is a plaintext map and
+	// the key belongs in config_secrets (see config_secrets.go ApplyDBSecrets).
+	if cfg.Audio != nil && cfg.Audio.Stt != nil {
+		st := cfg.Audio.Stt
+		set("audio.stt.provider", st.Provider)
+		set("audio.stt.base_url", st.BaseURL)
+		set("audio.stt.model", st.Model)
+		set("audio.stt.language", st.Language)
+		set("audio.stt.fallback", st.Fallback)
+		setInt("audio.stt.timeout_ms", st.TimeoutMs)
+		// Not a secret and not a model name — a host binary path — but it belongs in the
+		// same mirror or it is the one STT key the panel writes that the DB never carries.
+		set("audio.stt.silk_decoder", st.SilkDecoder)
+	}
+
 	// Cron
 	setInt("cron.max_retries", cfg.Cron.MaxRetries)
 	set("cron.default_timezone", cfg.Cron.DefaultTimezone)

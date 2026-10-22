@@ -21,8 +21,8 @@ var (
 //   - seed, presencePenalty, frequencyPenalty: advanced (Group="advanced")
 var geminiParams = []audio.ParamSchema{
 	{
-		Key:  "temperature",
-		Type: audio.ParamTypeRange,
+		Key:   "temperature",
+		Type:  audio.ParamTypeRange,
 		Label: "Temperature",
 		// Finding #14: note subtle effect on TTS; primary expressiveness via audio tags.
 		Description: "Sampling temperature (0.0–2.0, default 1.0). Effect is subtle on TTS — primary expressiveness comes from audio tags inserted in the text.",

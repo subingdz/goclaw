@@ -358,9 +358,21 @@ func (c *Channel) handleMessageEventFrom(ctx context.Context, event *MessageEven
 			case media.TypeAudio, media.TypeVoice:
 				var transcript string
 				var sttErr error
-				if c.audioMgr != nil {
-					sttCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{FilePath: m.FilePath, MimeType: "audio/ogg"}, audio.STTOptions{})
+				if c.audioMgr == nil || !c.audioMgr.STTAvailable(ctx) {
+					// No backend is the normal state for a gateway that never configured
+					// speech recognition; saying it once per message at Debug keeps the
+					// reason findable without turning the log into noise.
+					slog.Debug("feishu: no STT provider available, leaving voice untranscribed", "type", m.Type)
+				} else {
+					sttCtx, cancel := context.WithTimeout(ctx, c.audioMgr.STTTimeout(10*time.Second))
+					// Keyed by platform, not instance name: that is how the legacy
+					// per-channel proxy overrides are registered.
+					sttCtx = audio.WithChannel(sttCtx, channels.TypeFeishu)
+					res, err := c.audioMgr.Transcribe(sttCtx, audio.STTInput{
+						FilePath: m.FilePath,
+						MimeType: media.AudioSTTMime(m.ContentType, "audio/ogg"),
+						Filename: m.FileName,
+					}, audio.STTOptions{})
 					cancel()
 					if err == nil && res != nil {
 						transcript = res.Text

@@ -4,17 +4,23 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // mockSTT is a test STTProvider that either returns a fixed result or error.
+// gotInput keeps the most recent input so a test can assert what the manager actually
+// handed the provider — for example a decoded WAV where a SILK file went in.
 type mockSTT struct {
-	name   string
-	result *TranscriptResult
-	err    error
+	name     string
+	result   *TranscriptResult
+	err      error
+	gotInput STTInput
 }
 
 func (m *mockSTT) Name() string { return m.name }
-func (m *mockSTT) Transcribe(_ context.Context, _ STTInput, _ STTOptions) (*TranscriptResult, error) {
+
+func (m *mockSTT) Transcribe(_ context.Context, in STTInput, _ STTOptions) (*TranscriptResult, error) {
+	m.gotInput = in
 	return m.result, m.err
 }
 
@@ -142,5 +148,38 @@ func TestManager_Transcribe_ChannelOverrideWins(t *testing.T) {
 	}
 	if res.Text != "channel-override" {
 		t.Errorf("expected channel override result, got %q", res.Text)
+	}
+}
+
+// STTTimeout is how audio.stt.timeout_ms reaches a channel's call deadline. Channels used to
+// hard-code theirs, so any configured value above 10s was ignored in silence — including the
+// long voice notes an operator raises the timeout for.
+func TestSTTTimeoutHonoursConfiguredValue(t *testing.T) {
+	const channelDefault = 10 * time.Second
+
+	m := NewManager(ManagerConfig{})
+	if got := m.STTTimeout(channelDefault); got != channelDefault {
+		t.Fatalf("unset timeout = %v, want the channel default %v", got, channelDefault)
+	}
+
+	m.SetSTTDefaults(STTOptions{TimeoutMs: 30000})
+	if got := m.STTTimeout(channelDefault); got != 30*time.Second {
+		t.Fatalf("configured timeout = %v, want 30s: the operator's number must win", got)
+	}
+
+	m.SetSTTDefaults(STTOptions{TimeoutMs: 4000})
+	if got := m.STTTimeout(channelDefault); got != 4*time.Second {
+		t.Fatalf("configured timeout = %v, want the tighter 4s", got)
+	}
+
+	// A zero timeout_ms means "no opinion", not "no deadline".
+	m.SetSTTDefaults(STTOptions{})
+	if got := m.STTTimeout(channelDefault); got != channelDefault {
+		t.Fatalf("cleared timeout = %v, want the channel default back", got)
+	}
+
+	var nilMgr *Manager
+	if got := nilMgr.STTTimeout(channelDefault); got != channelDefault {
+		t.Fatalf("nil manager timeout = %v, want the caller's default instead of a panic", got)
 	}
 }

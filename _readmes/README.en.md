@@ -65,6 +65,7 @@ This repository is a **China-ecosystem edition** of [GoClaw](https://github.com/
 | Area | What it means for the domestic ecosystem | Where to configure |
 |---|---|---|
 | Vectors & retrieval | The embedding width is owned by **the database column**: the gateway reads the pgvector column width at startup and refuses to start when a provider declares a different one, printing the exact fix; `goclaw migrate embed-dims --to N` re-dimensions columns (`--dry-run` first, listing width / rows to clear / indexes). Leaving the field empty means "send no truncation parameter", so models whose native width already matches (bge-m3) stay usable | System settings → Embedding; Providers → Embedding |
+| Speech-to-text | `audio.stt` is now the only real configuration surface (OpenAI-compatible endpoints such as SiliconFlow SenseVoiceSmall), `timeout_ms` actually governs the call, and QQ/WeChat **SILK** voice goes through an external decoder (ffmpeg cannot decode SILK; the startup log says whether one was found). Keys travel only through `config_secrets` / `GOCLAW_AUDIO_STT_API_KEY`. Both panels' stt forms were previously decoys and now edit `audio.stt` | Config → Integrations → Speech-to-Text; desktop Built-in tools → stt |
 
 ## Core Features
 

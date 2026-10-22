@@ -67,7 +67,7 @@ var minimaxParams = []audio.ParamSchema{
 		Type:               audio.ParamTypeEnum,
 		Label:              "Emotion",
 		AgentOverridableAs: "emotion",
-		Default:          "",
+		Default:            "",
 		Enum: []audio.EnumOption{
 			{Value: "", Label: "None (default)"},
 			{Value: "happy", Label: "Happy"},
@@ -185,8 +185,8 @@ var minimaxParams = []audio.ParamSchema{
 	// pronunciation_dict: JSON array of "word/pinyin" rule strings for custom pronunciation.
 	// Capped at 8KB pre-accept (Finding #6). On parse failure: log + omit, synth continues.
 	{
-		Key:  "pronunciation_dict",
-		Type: audio.ParamTypeText,
+		Key:   "pronunciation_dict",
+		Type:  audio.ParamTypeText,
 		Label: "Pronunciation Dictionary",
 		Description: `Custom pronunciation rules as a JSON array of "word/pinyin" strings, ` +
 			`e.g. ["omg/Oh my god", "CEO/Chief Executive Officer"]. ` +
