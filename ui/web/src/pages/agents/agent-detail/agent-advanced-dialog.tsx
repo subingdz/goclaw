@@ -13,12 +13,13 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type {
 	  AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
-  DeliveryBehaviorConfig, ModelFallbackConfig, ReasoningOverrideMode,
+  DeliveryBehaviorConfig, ModelFallbackConfig, ModelRoutingConfig, ReasoningOverrideMode,
   SandboxConfig, WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
   ChatGPTOAuthRoutingSection, ThinkingSection, WorkspaceSharingSection, CompactionSection,
-  ContextPruningSection, InboundDebounceSection, ModelFallbackSection, SandboxSection,
+  ContextPruningSection, InboundDebounceSection, ModelFallbackSection, ModelRoutingSection,
+  SandboxSection,
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -66,6 +67,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [deliveryBehavior, setDeliveryBehavior] = useState<DeliveryBehaviorConfig>(init.deliveryBehavior);
   const [inboundDebounceMode, setInboundDebounceMode] = useState(init.inboundDebounceMode);
   const [inboundDebounceMs, setInboundDebounceMs] = useState(init.inboundDebounceMs);
+  const [modelRoutingMode, setModelRoutingMode] = useState(init.modelRoutingMode);
+  const [modelRouting, setModelRouting] = useState<ModelRoutingConfig>(init.modelRouting);
   const [pruneEnabled, setPruneEnabled] = useState(init.pruneEnabled);
   const [prune, setPrune] = useState<ContextPruningConfig>(init.prune);
   const [sbEnabled, setSbEnabled] = useState(init.sbEnabled);
@@ -89,6 +92,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setDeliveryBehavior(s.deliveryBehavior);
     setInboundDebounceMode(s.inboundDebounceMode);
     setInboundDebounceMs(s.inboundDebounceMs);
+    setModelRoutingMode(s.modelRoutingMode);
+    setModelRouting(s.modelRouting);
     setPruneEnabled(s.pruneEnabled);
     setPrune(s.prune);
     setSbEnabled(s.sbEnabled);
@@ -146,6 +151,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         deliveryBehavior,
         inboundDebounceMode,
         inboundDebounceMs,
+        modelRoutingMode,
+        modelRouting,
         pruneEnabled,
         prune,
         sbEnabled,
@@ -237,6 +244,18 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             providers={providers}
             value={modelFallback}
             onChange={setModelFallback}
+          />
+
+          <ModelRoutingSection
+            mode={modelRoutingMode}
+            onModeChange={setModelRoutingMode}
+            value={modelRouting}
+            onChange={setModelRouting}
+            providers={providers}
+            primaryProvider={agent.provider}
+            primaryModel={agent.model}
+            primaryProviderId={currentProvider?.id}
+            agentKey={agent.agent_key}
           />
 
           <DeliveryBehaviorSection

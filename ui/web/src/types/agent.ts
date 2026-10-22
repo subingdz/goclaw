@@ -161,6 +161,63 @@ export interface ModelFallbackConfig {
   cooldown_enabled?: boolean;
 }
 
+// Per-turn model routing lives in other_config.model_routing. It is NOT model_fallback: fallback
+// reacts to a failed call, routing decides before the call from what the turn asks for. Tiers are
+// an ordered list and the first matching one wins, so the row order in the UI is the policy.
+export interface ModelRoutingTier {
+  name?: string;
+  model?: string;
+  provider?: string;
+  // One line describing what this tier is for. The optional classifier model reads it, so it is
+  // the only place the intent of a tier is recorded anywhere in the system.
+  hint?: string;
+  min_runes?: number;
+  min_tokens?: number;
+  requires_code?: boolean;
+  requires_media?: boolean;
+  run_kinds?: string[];
+}
+
+export interface ModelRoutingClassifierConfig {
+  model?: string;
+  provider?: string;
+  timeout_ms?: number;
+  cache_ttl_seconds?: number;
+}
+
+export interface ModelRoutingConfig {
+  enabled?: boolean;
+  tiers?: ModelRoutingTier[];
+  classifier?: ModelRoutingClassifierConfig | null;
+}
+
+export const MODEL_ROUTING_MAX_TIERS = 8;
+
+// Read-only view of the gateway's live routing counters (WS agents.routingStats). They are
+// per-process and per cached agent: the window restarts when the agent is edited or the router TTL
+// expires it. `cached: false` is not "zero activity" — it means no live loop answered the question.
+export interface ModelRoutingStats {
+  windowStart?: string;
+  agentModel?: string;
+  decisions: number;
+  changes: number;
+  noMatch: number;
+  providerMisses: number;
+  classifierCalls: number;
+  classifierCacheHits: number;
+  classifierFailures: number;
+  byTier?: Record<string, number>;
+}
+
+export interface ModelRoutingStatsResponse {
+  agentId: string;
+  hasPolicy: boolean;
+  cached: boolean;
+  provider?: string;
+  model?: string;
+  stats?: ModelRoutingStats;
+}
+
 export interface KgDedupConfig {
   enabled?: boolean;
   similarity_threshold?: number;

@@ -495,6 +495,10 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
 				return
 			}
+			if err := store.ValidateModelRouting(v); err != nil {
+				writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
+				return
+			}
 			// Finding #5: enforce tts_params key allow-list so arbitrary keys
 			// (e.g. __proto__, voice_settings.stability) cannot persist in JSONB.
 			if tp, ok := v["tts_params"]; ok && tp != nil {

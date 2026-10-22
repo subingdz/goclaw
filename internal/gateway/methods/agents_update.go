@@ -140,6 +140,12 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 					client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 					return
 				}
+				// A policy that parses but matches nothing is inert; refuse it at save time so the
+				// operator hears about it now instead of noticing a month later.
+				if err := store.ValidateModelRouting(otherMap); err != nil {
+					client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+					return
+				}
 				// Finding #5: validate tts_params allow-list via shared audio validator
 				// (Action D: single source of truth in internal/audio).
 				if tp, ok := otherMap["tts_params"]; ok && tp != nil {

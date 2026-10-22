@@ -6,6 +6,8 @@ import type {
   DeliveryBehaviorConfig,
   InboundDebounceOverrideMode,
   ModelFallbackConfig,
+  ModelRoutingConfig,
+  ModelRoutingTier,
   ReasoningOverrideMode,
   SandboxConfig,
   WorkspaceSharingConfig,
@@ -22,6 +24,7 @@ import {
 } from "./agent-display-utils";
 import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
 import type { ProviderData } from "@/pages/providers/hooks/use-providers";
+import { MODEL_ROUTING_MAX_TIERS } from "@/types/agent";
 
 const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
 
@@ -37,6 +40,8 @@ export interface AdvancedDialogState {
   comp: CompactionConfig;
   deliveryBehaviorMode: "inherit" | "custom";
   deliveryBehavior: DeliveryBehaviorConfig;
+  modelRoutingMode: "inherit" | "custom";
+  modelRouting: ModelRoutingConfig;
   inboundDebounceMode: InboundDebounceOverrideMode;
   inboundDebounceMs: number;
   pruneEnabled: boolean;
@@ -86,6 +91,9 @@ export function deriveState(
   const rawDeliveryBehavior = isPlainObject(otherConfig.delivery_behavior)
     ? otherConfig.delivery_behavior as DeliveryBehaviorConfig
     : undefined;
+  const rawModelRouting = isPlainObject(otherConfig.model_routing)
+    ? otherConfig.model_routing as ModelRoutingConfig
+    : undefined;
   const inboundDebounceMs =
     typeof rawInboundDebounceMs === "number" && Number.isFinite(rawInboundDebounceMs)
       ? Math.max(0, Math.trunc(rawInboundDebounceMs))
@@ -123,6 +131,12 @@ export function deriveState(
     },
     inboundDebounceMode: inboundDebounceMs === undefined ? "inherit" : "custom",
     inboundDebounceMs: inboundDebounceMs ?? 0,
+    // A stored policy is re-read through the same normalizer the save path uses, so what the card
+    // shows is what would be written back. Editing delivery behaviour or anything else in this
+    // dialog re-sends other_config.model_routing, and a half-saved row (blank model) would
+    // otherwise be silently persisted forever.
+    modelRoutingMode: rawModelRouting ? "custom" : "inherit",
+    modelRouting: normalizeModelRoutingForPayload(rawModelRouting ?? { tiers: [] }),
     pruneEnabled: agent.context_pruning?.mode !== "off",
     prune: agent.context_pruning ?? {},
     sbEnabled: agent.sandbox_config != null,
@@ -147,6 +161,8 @@ export interface BuildAdvancedUpdatePayloadParams {
   comp: CompactionConfig;
   deliveryBehaviorMode: "inherit" | "custom";
   deliveryBehavior: DeliveryBehaviorConfig;
+  modelRoutingMode: "inherit" | "custom";
+  modelRouting: ModelRoutingConfig;
   inboundDebounceMode: InboundDebounceOverrideMode;
   inboundDebounceMs: number;
   pruneEnabled: boolean;
@@ -163,6 +179,7 @@ export function buildAdvancedUpdatePayload(
     expertReasoningAvailable, reasoningMode, reasoningEffort, reasoningExpert,
     reasoningFallback, thinkingLevel, chatgptRouting, wsSharing,
     modelFallback, comp, deliveryBehaviorMode, deliveryBehavior, inboundDebounceMode, inboundDebounceMs,
+    modelRoutingMode, modelRouting,
     pruneEnabled, prune, sbEnabled, sb,
   } = params;
 
@@ -191,6 +208,11 @@ export function buildAdvancedUpdatePayload(
     updates.other_config,
     deliveryBehaviorMode,
     deliveryBehavior,
+  );
+  updates.other_config = buildOtherConfigWithModelRouting(
+    updates.other_config,
+    modelRoutingMode,
+    modelRouting,
   );
 
   // Build reasoning_config and thinking_level as top-level fields
@@ -250,6 +272,85 @@ function buildOtherConfigWithDeliveryBehavior(
     bag.delivery_behavior = value;
   }
   return Object.keys(bag).length > 0 ? bag : null;
+}
+
+function buildOtherConfigWithModelRouting(
+  base: unknown,
+  mode: "inherit" | "custom",
+  value: ModelRoutingConfig,
+): Record<string, unknown> | null {
+  const bag = isPlainObject(base) ? { ...base } : {};
+  if (mode === "inherit") {
+    delete bag.model_routing;
+  } else {
+    bag.model_routing = normalizeModelRoutingForPayload(value);
+  }
+  return Object.keys(bag).length > 0 ? bag : null;
+}
+
+/**
+ * Produces the shape internal/store.ValidateModelRouting accepts. Two rules carry the weight:
+ * `enabled` only survives with at least one tier that names a model (an enabled-but-empty policy
+ * is refused on save and would be inert at runtime anyway), and a classifier is dropped rather
+ * than refused when its model is blank, because the panel keeps the field on screen while the
+ * operator is still filling the card in. Order of the tier list is preserved — it *is* the policy.
+ */
+export function normalizeModelRoutingForPayload(config: ModelRoutingConfig): ModelRoutingConfig {
+  const tiers = (config.tiers ?? [])
+    .map(normalizeRoutingTier)
+    .filter((tier): tier is ModelRoutingTier => tier !== null)
+    .slice(0, MODEL_ROUTING_MAX_TIERS);
+
+  const classifier = normalizeRoutingClassifier(config.classifier);
+  return {
+    enabled: Boolean(config.enabled) && tiers.length > 0,
+    tiers,
+    ...(classifier ? { classifier } : {}),
+  };
+}
+
+function normalizeRoutingTier(tier: ModelRoutingTier): ModelRoutingTier | null {
+  const model = tier.model?.trim() ?? "";
+  if (!model) return null;
+  const name = tier.name?.trim() ?? "";
+  const provider = tier.provider?.trim() ?? "";
+  const hint = tier.hint?.trim() ?? "";
+  const runKinds = (tier.run_kinds ?? [])
+    .map((kind) => kind?.trim() ?? "")
+    .filter(Boolean);
+
+  return {
+    model,
+    ...(name ? { name } : {}),
+    ...(provider ? { provider } : {}),
+    ...(hint ? { hint } : {}),
+    ...(positiveInt(tier.min_runes) ? { min_runes: positiveInt(tier.min_runes) } : {}),
+    ...(positiveInt(tier.min_tokens) ? { min_tokens: positiveInt(tier.min_tokens) } : {}),
+    ...(tier.requires_code ? { requires_code: true } : {}),
+    ...(tier.requires_media ? { requires_media: true } : {}),
+    ...(runKinds.length > 0 ? { run_kinds: runKinds } : {}),
+  };
+}
+
+function normalizeRoutingClassifier(
+  classifier: ModelRoutingConfig["classifier"],
+): ModelRoutingConfig["classifier"] | null {
+  const model = classifier?.model?.trim() ?? "";
+  if (!model) return null;
+  const provider = classifier?.provider?.trim() ?? "";
+  return {
+    model,
+    ...(provider ? { provider } : {}),
+    ...(positiveInt(classifier?.timeout_ms) ? { timeout_ms: positiveInt(classifier?.timeout_ms) } : {}),
+    ...(positiveInt(classifier?.cache_ttl_seconds)
+      ? { cache_ttl_seconds: positiveInt(classifier?.cache_ttl_seconds) }
+      : {}),
+  };
+}
+
+function positiveInt(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.trunc(value);
 }
 
 function buildOtherConfigWithInboundDebounce(

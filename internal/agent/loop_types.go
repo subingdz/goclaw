@@ -89,6 +89,15 @@ type Loop struct {
 	agentType        string // "open" or "predefined"
 	defaultTimezone  string // system default timezone for bootstrap pre-fill
 	provider         providers.Provider
+	// providerReg resolves a tier's provider name for per-turn model routing. Tenant-scoped
+	// exactly like agent provider resolution (tenant-specific first, master fallback), so a
+	// routing policy can never reach another tenant's credentials.
+	providerReg *providers.Registry
+	// routingCache memoises classifier answers keyed by message; nil when no classifier is set.
+	routingCache *routingClassifierCache
+	// routingCounters is the live per-agent routing tally behind agents.routingStats. It is windowed
+	// by this Loop's lifetime: editing the agent drops the cached Loop, and the counts restart.
+	routingCounters  *routingCounters
 	model            string
 	modelRegistry    providers.ModelRegistry // resolves per-model context window at run time (nil = use static contextWindow)
 	contextWindow    int
@@ -470,6 +479,11 @@ type LoopConfig struct {
 
 	// User identity resolver for credential lookups (maps channel contacts → tenant users)
 	UserResolver UserIdentityResolver
+
+	// Provider registry for per-turn model routing (nil = a tier naming another provider falls
+	// back to the agent's own). Same instance the resolver used to pick the agent's provider, so
+	// tenant isolation is identical to normal agent resolution.
+	ProviderReg *providers.Registry
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -520,7 +534,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		guard = NewInputGuard()
 	}
 
-	return &Loop{
+	loop := &Loop{
 		id:                     cfg.ID,
 		displayName:            cfg.DisplayName,
 		agentUUID:              cfg.AgentUUID,
@@ -528,6 +542,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		agentOtherConfig:       append([]byte(nil), cfg.AgentOtherConfig...), // defensive copy
 		agentType:              cfg.AgentType,
 		provider:               cfg.Provider,
+		providerReg:            cfg.ProviderReg,
 		model:                  cfg.Model,
 		modelRegistry:          cfg.ModelRegistry,
 		contextWindow:          cfg.ContextWindow,
@@ -613,6 +628,16 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillStore:             cfg.SkillStore,
 		userResolver:           cfg.UserResolver,
 	}
+	// The classifier cache and the counters exist only for agents that actually carry a policy, so
+	// the (large) majority of Loops carry neither. A Loop is rebuilt on agents.update, so enabling
+	// routing in the panel is enough — no restart, and the counters start at that moment.
+	if rc := store.FindModelRoutingConfig(cfg.AgentOtherConfig); rc != nil {
+		loop.routingCounters = newRoutingCounters()
+		if rc.Classifier != nil {
+			loop.routingCache = newRoutingClassifierCache()
+		}
+	}
+	return loop
 }
 
 // RunRequest is the input for processing a message through the agent.

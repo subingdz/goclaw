@@ -44,14 +44,14 @@ type TraceCollector interface {
 // Each agent has a unique ID and its own provider/model/tools config.
 // Cached Loops expire after TTL (safety net for multi-instance).
 type Router struct {
-	agents          map[string]*agentEntry
-	mu              sync.RWMutex
-	activeRuns      sync.Map     // runID → *ActiveRun
-	sessionRuns     sync.Map     // sessionKey → runID (secondary index for O(1) IsSessionBusy)
-	agentActivity   sync.Map     // sessionKey → *AgentActivityStatus
-	resolver        ResolverFunc // optional: lazy creation from DB
-	ttl             time.Duration
-	traceCollector  TraceCollector // optional: for force-marking aborted traces
+	agents         map[string]*agentEntry
+	mu             sync.RWMutex
+	activeRuns     sync.Map     // runID → *ActiveRun
+	sessionRuns    sync.Map     // sessionKey → runID (secondary index for O(1) IsSessionBusy)
+	agentActivity  sync.Map     // sessionKey → *AgentActivityStatus
+	resolver       ResolverFunc // optional: lazy creation from DB
+	ttl            time.Duration
+	traceCollector TraceCollector // optional: for force-marking aborted traces
 }
 
 func NewRouter() *Router {
@@ -246,6 +246,29 @@ func (r *Router) GetCached(ctx context.Context, agentID string) (Agent, bool) {
 	return entry.agent, true
 }
 
+// RoutingStatsAgent is implemented by an agent that tallies per-turn model routing. It is an
+// optional interface on purpose: the Agent interface is implemented in several places, and a
+// dashboard-only counter should not become a method every implementation must answer.
+type RoutingStatsAgent interface {
+	RoutingStats() RoutingStats
+}
+
+// RoutingStats returns the live routing tally for a *cached* agent. It deliberately does not
+// resolve: polling a dashboard must not rebuild an agent (that would redo provider lookup and
+// re-anchor the counters). ok=false means "no live Loop for this agent right now" — which the
+// caller must report as such, because "zero decisions" and "nothing cached" look identical in data.
+func (r *Router) RoutingStats(ctx context.Context, agentKey string) (RoutingStats, bool) {
+	ag, ok := r.GetCached(ctx, agentKey)
+	if !ok {
+		return RoutingStats{}, false
+	}
+	stats, ok := ag.(RoutingStatsAgent)
+	if !ok {
+		return RoutingStats{}, false
+	}
+	return stats.RoutingStats(), true
+}
+
 // --- Active Run Tracking (matching TS chat-abort.ts) ---
 
 // ActiveRun tracks a running agent invocation so it can be aborted via chat.abort
@@ -258,9 +281,9 @@ type ActiveRun struct {
 	StartedAt  time.Time
 	InjectCh   chan InjectedMessage // buffered channel for mid-run user message injection
 	Done       chan struct{}        // closed when goroutine actually exits (via UnregisterRun)
-	State      atomic.Int32        // 0=running, 1=aborting, 2=done
-	TraceID    uuid.UUID           // set after trace creation via SetRunTraceID
-	TenantID   uuid.UUID           // captured at RegisterRun for forceMarkTraceAborted
+	State      atomic.Int32         // 0=running, 1=aborting, 2=done
+	TraceID    uuid.UUID            // set after trace creation via SetRunTraceID
+	TenantID   uuid.UUID            // captured at RegisterRun for forceMarkTraceAborted
 }
 
 // AbortResult describes the outcome of a single AbortRun call.

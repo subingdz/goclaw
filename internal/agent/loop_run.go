@@ -20,6 +20,12 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	defer l.activeRuns.Add(-1)
 	ctx = withDelegationArtifactTextRedactor(ctx, &req)
 
+	// Per-turn model routing, before anything reads the request: the trace row records the tags
+	// written here, and the pipeline resolves model+provider+reasoning from the override pair set
+	// here. An empty req.ModelOverride from the caller means "nothing decided yet", which is
+	// precisely the case cron and heartbeat opt out of by naming a model.
+	l.routeModel(ctx, &req)
+
 	// Per-run emit wrapper: enriches every AgentEvent with delegation + routing context.
 	emitRun := func(event AgentEvent) {
 		event.RunKind = req.RunKind

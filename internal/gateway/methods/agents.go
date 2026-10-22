@@ -17,7 +17,7 @@ import (
 )
 
 // AgentsMethods handles agents.list, agents.create, agents.update, agents.delete,
-// agents.files.list/get/set, agent.identity.get.
+// agents.files.list/get/set, agents.routingStats, agent.identity.get.
 type AgentsMethods struct {
 	agents      *agent.Router
 	cfg         *config.Config
@@ -48,6 +48,7 @@ func (m *AgentsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodAgentsFileGet, m.handleFilesGet)
 	router.Register(protocol.MethodAgentsFileSet, m.handleFilesSet)
 	router.Register(protocol.MethodAgentIdentityGet, m.handleIdentityGet)
+	router.Register(protocol.MethodAgentsRoutingStats, m.handleRoutingStats)
 }
 
 type agentParams struct {

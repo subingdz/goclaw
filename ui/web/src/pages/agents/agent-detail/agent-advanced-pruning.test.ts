@@ -50,6 +50,8 @@ function pruningPayloadFor(contextPruning: unknown, pruneEnabled: boolean, prune
     deliveryBehavior: {},
     inboundDebounceMode: "inherit",
     inboundDebounceMs: 0,
+    modelRoutingMode: "inherit",
+    modelRouting: {},
     pruneEnabled,
     prune,
     sbEnabled: false,

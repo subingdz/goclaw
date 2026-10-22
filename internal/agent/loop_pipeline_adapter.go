@@ -23,18 +23,7 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 	// Resolve the effective model + provider BEFORE building deps so the pre-call
 	// budget estimate reserves reasoning output for the model that will actually
 	// run (a ModelOverride can change the reasoning capability, hence the bump).
-	model := l.model
-	if req.ModelOverride != "" {
-		model = req.ModelOverride
-	}
-	provider := l.provider
-	if req.ProviderOverride != nil {
-		provider = req.ProviderOverride
-	} else if req.ModelOverride != "" {
-		if fallback, ok := provider.(interface{ PrimaryProvider() providers.Provider }); ok {
-			provider = fallback.PrimaryProvider()
-		}
-	}
+	model, provider := l.effectiveRunModelProvider(&req)
 
 	deps := l.buildPipelineDeps(&req, bridgeRS)
 
@@ -46,6 +35,32 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 		return nil, err
 	}
 	return redactDelegationRunResult(&req, convertRunResult(pResult)), nil
+}
+
+// effectiveRunModelProvider maps the request's override pair onto the model and provider this
+// run will actually call. It is the whole seam between "something chose a model" (per-turn
+// routing, cron, heartbeat, subagent spawn) and the pipeline, so it is where a routing decision
+// either lands or does not.
+//
+// The PrimaryProvider unwrap is load-bearing and easy to misread: agents.model_fallback wraps the
+// provider in ModelFallbackProvider, whose first attempt rewrites req.Model to the *configured*
+// model. Leaving the wrapper in place would silently undo the override on every call, which is
+// why an override drops to the unwrapped provider and the run loses failure-driven fallback.
+func (l *Loop) effectiveRunModelProvider(req *RunRequest) (string, providers.Provider) {
+	model := l.model
+	if req.ModelOverride != "" {
+		model = req.ModelOverride
+	}
+	provider := l.provider
+	if req.ProviderOverride != nil {
+		return model, req.ProviderOverride
+	}
+	if req.ModelOverride != "" {
+		if fallback, ok := provider.(interface{ PrimaryProvider() providers.Provider }); ok {
+			provider = fallback.PrimaryProvider()
+		}
+	}
+	return model, provider
 }
 
 // buildPipelineDeps maps Loop fields + methods to PipelineDeps callbacks.

@@ -29,6 +29,8 @@ const CHANNEL_PREFIX_LABELS: Array<[string, string]> = [
   ["whatsapp", "WhatsApp"],
   ["facebook", "Facebook"],
   ["pancake", "Pancake"],
+  ["qq", "QQ"],
+  ["weixin", "WeChat"],
   ["feishu", "Feishu"],
   ["lark", "Lark"],
   ["slack", "Slack"],

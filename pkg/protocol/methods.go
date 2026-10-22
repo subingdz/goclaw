@@ -25,6 +25,10 @@ const (
 	MethodAgentsFileList = "agents.files.list"
 	MethodAgentsFileGet  = "agents.files.get"
 	MethodAgentsFileSet  = "agents.files.set"
+	// Read-only live counters for per-turn model routing (see internal/agent/model_routing.go).
+	// Named `stats` rather than `metrics` because these are process-lifetime counters, not a
+	// metrics pipeline — they reset when the agent is re-resolved.
+	MethodAgentsRoutingStats = "agents.routingStats"
 
 	// Config
 	MethodConfigGet           = "config.get"

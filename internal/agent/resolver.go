@@ -481,6 +481,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			IsTeamLead:             isTeamLead,
 			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
+			ProviderReg:            deps.ProviderReg,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
 			ContextWindow:          contextWindow,

@@ -16,6 +16,58 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Per-turn model routing (`agents.other_config.model_routing`)** — an agent can now pick a
+  different model for a turn *before* the turn runs, from what that turn asks for, instead of only
+  reacting to a failed call. This fills a real hole: `model_fallback` is failure-driven, the media
+  chains pick a backend by capability, cron/heartbeat/webhook/subagent name a model at their own
+  call sites, and nothing at all read the request. No skill could close it either — SKILL.md
+  metadata carries only `name` and `description`, hooks have no pre-model event, and no registered
+  tool lets an agent change its own next-turn model.
+  A policy is an **ordered tier list and the first match wins**, because GoClaw does not know which
+  model is stronger and no provider publishes that: ranking stays the operator's decision, written
+  down as list order plus thresholds (`min_runes`, `min_tokens`, `requires_code`, `requires_media`,
+  `run_kinds`) rather than guessed at in a table that would be wrong quietly. Every declared
+  condition must hold; a tier with only a model matches everything, which is how "always use this
+  model" is expressed. Rules answer first, and the **optional classifier** — one 24-token,
+  thinking-off call to a model the operator names, `Purpose: "model-routing"`, run through the same
+  usage-cap preflight as the agent loop — only runs when no rule matched. It reads the tier list
+  and each tier's own `hint` text and answers a tier name or `BASELINE`; nothing in the system
+  invents a difficulty score. Routing rides the existing `ModelOverride`/`ProviderOverride` pair
+  (the seam is now `effectiveRunModelProvider`, extracted so it can be tested), so a caller that
+  already named a model wins outright and the budget pre-estimate, reasoning-effort resolution and
+  provider unwrapping all see one coherent choice. That also means a routed turn leaves the
+  fallback wrapper behind, exactly as every other override does — routing is a cost/quality knob,
+  not a reliability one, and the docs now say so where fallback is documented.
+  A tier may name another provider; that lookup is tenant-scoped (`GetForTenant(agent.TenantID, …)`
+  with the usual master fallback), so one tenant's policy cannot reach another tenant's
+  credentials. Every failure path — unresolvable provider, classifier timeout, unparseable answer,
+  unknown tier name, usage-cap refusal — keeps the agent's configured model and logs at Debug,
+  because a router that can break a conversation is worse than no router; a *failing* classifier is
+  paused for a minute rather than cached as an answer, so one blip does not suppress routing for
+  the whole TTL. Decisions are auditable without a schema change, in three layers: one
+  `model_routing: decision` Info line naming tier/from/to/source/reason/signals, a
+  `model_route:<tier>` trace tag (which is why routing happens before the trace row is written), and
+  usage events, which already record the model that actually ran, so routed cost lands in the
+  existing dashboard. Per-agent **process** counters round it out behind a read-only
+  `WS agents.routingStats`: evaluated / routed / no-change / provider-missing, a per-tier breakdown,
+  and the classifier's calls, cache hits and failures — surfaced in the card because three states
+  that look identical as bare zeros are not: a policy saved but not run since the edit (updating an
+  agent drops the cached loop, hence the separate `hasPolicy` and `cached` flags), a policy whose
+  thresholds nothing clears, and a policy that fires and routes to the model the agent already uses.
+  They reset with the loop on purpose; writing them per turn to a table was considered and rejected
+  as paying DB churn for a question that only lives as long as the tuning session.
+  Editing is in the web panel (Agents → agent → Advanced → *Model routing*, drag-to-order rows) —
+  the desktop app has no routing card, consistent with `model_fallback` and `delivery_behavior`
+  also having none there, and a desktop save preserves the key rather than clobbering it.
+  `store.ValidateModelRouting` refuses the payloads that would parse but do nothing (enabled with no
+  tier naming a model, >8 tiers, non-numeric thresholds, a classifier without a model) on both the
+  WS and HTTP update paths, while the read path stays deliberately tolerant; `agents.create`
+  validates nothing, which is pre-existing for every `other_config` key and now written down.
+  Verified by unit tests only (46 new, across `internal/store`, `internal/agent`,
+  `internal/gateway/methods` and the panel payload module) plus both build tags; no decision has
+  ever been made against a real provider, the
+  panel card has never been driven in a browser, and the classifier's answer quality is unmeasured.
+
 - **Image generation works with URL-returning providers (Zhipu CogView, SiliconFlow, and the
   OpenAI-compatible gateways generally)** — the standard `/images/generations` path asked for
   `response_format=b64_json` and then read exactly one field, `data[0].b64_json`. Domestic
