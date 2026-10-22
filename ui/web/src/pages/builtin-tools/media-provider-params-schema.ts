@@ -47,6 +47,51 @@ export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> =
       },
     ],
     minimax_native: [],
+    // Any provider registered as OpenAI-compatible: Zhipu CogView, SiliconFlow, Bailian-compatible
+    // gateways, self-hosted diffusers servers. These take the same call but not the same field
+    // names, so the fields are named after each vendor's own documented parameter.
+    openai_compat: [
+      {
+        key: "size",
+        label: "Size",
+        labelKey: "builtin.mediaChain.sizeLabel",
+        type: "text",
+        default: "",
+        description: "1024x1024",
+      },
+      {
+        key: "image_size",
+        label: "Image size",
+        labelKey: "builtin.mediaChain.imageSizeLabel",
+        type: "text",
+        default: "",
+        description: "1024x1024",
+      },
+      {
+        key: "response_format",
+        label: "Response format",
+        labelKey: "builtin.mediaChain.responseFormatLabel",
+        type: "select",
+        default: "b64_json",
+        options: [
+          {
+            value: "b64_json",
+            label: "Base64 (default)",
+            labelKey: "builtin.mediaChain.responseFormatB64",
+          },
+          {
+            value: "url",
+            label: "URL",
+            labelKey: "builtin.mediaChain.responseFormatURL",
+          },
+          {
+            value: "off",
+            label: "Omit the parameter",
+            labelKey: "builtin.mediaChain.responseFormatOff",
+          },
+        ],
+      },
+    ],
     bailian: [
       {
         key: "size",

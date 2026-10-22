@@ -563,8 +563,11 @@ func TestCreateImageTool_OpenAIEdits_JSON(t *testing.T) {
 		if reqBody.Model != "gpt-image-2" {
 			t.Errorf("expected model 'gpt-image-2', got %s", reqBody.Model)
 		}
-		if reqBody.ResponseFormat != "b64_json" {
-			t.Errorf("expected response_format 'b64_json', got %s", reqBody.ResponseFormat)
+		// gpt-image-* rejects response_format with 400 Unknown parameter and always returns
+		// base64, so the edits path must not send it. This assertion used to require the field,
+		// which pinned a request OpenAI would have refused.
+		if reqBody.ResponseFormat != "" {
+			t.Errorf("expected no response_format for %s, got %s", reqBody.Model, reqBody.ResponseFormat)
 		}
 		if len(reqBody.Images) != 1 {
 			t.Fatalf("expected 1 image, got %d", len(reqBody.Images))

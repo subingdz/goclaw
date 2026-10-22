@@ -16,6 +16,37 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Image generation works with URL-returning providers (Zhipu CogView, SiliconFlow, and the
+  OpenAI-compatible gateways generally)** — the standard `/images/generations` path asked for
+  `response_format=b64_json` and then read exactly one field, `data[0].b64_json`. Domestic
+  providers ignore that request and hand back a link: CogView documents `data[].url` (and its own
+  parameter table types `data` as a list of strings), SiliconFlow does not even reuse the array
+  name, answering `images[].url` with a `kind` of `generated` or `original`. Every one of them
+  therefore ended in `no image data in response`. `internal/tools/create_image_response.go` now
+  reads all five shapes — `data[].b64_json`, `data[].url`, `data` as plain strings, `images[].url`
+  (preferring `generated` over an echoed `original` input), and a `data:image/...;base64,` value
+  arriving in either field — and downloads the location gateway-side, which is not optional: those
+  links expire in 24 hours (Bailian, 302.AI) to 30 days (CogView), and the workspace copy is the
+  only durable artifact. The fetch keeps the reference-image path's SSRF posture (validate, pin the
+  resolved IP, follow a redirect only while it stays on the same host, 20 MB cap), so a hostile
+  `base_url` cannot turn the gateway into a metadata-endpoint reader. Two related gaps in the same
+  path are closed: a chain entry's vendor parameters now reach the request body for a documented
+  whitelist (`size`/`quality` for OpenAI and Zhipu, `image_size`/`num_inference_steps`/
+  `guidance_scale`/`sfw` for SiliconFlow) instead of being dropped so every answer came back
+  square, and `response_format` is now model-aware and overridable: it stays `b64_json` for
+  everything that accepts the field but is omitted for the `gpt-image*` / `chatgpt-image*` families,
+  which reject it outright (Azure's reference says the series does not support it and always returns
+  base64) — GoClaw's default OpenAI image model is one of them, so the stock OpenAI path answered
+  `400 Unknown parameter: 'response_format'`. An entry with no model
+  now falls back to the provider's own default rather than sending `"model": ""`. Finally, adding a
+  provider in the panel is enough on its own: the image chain ends with a wildcard that appends
+  every other registered **API-key** provider after the known vendors. OAuth/Codex credentials are
+  never auto-tried (a person's subscription is not something to spend on a guess) and a provider
+  with no default model is skipped. The panel exposes the three fields under Built-in Tools →
+  create_image → chain entry → Settings for any provider registered as `openai_compat`. Tools whose
+  priority list omits the wildcard (`create_video`, `read_*`) keep their closed vendor lists.
+
+
 - **Official QQ bot channel** — a WebSocket-bot integration (`internal/channels/qq`)
   configured as a channel instance in the panel: credentials encrypted at rest,
   `dm_policy` / `group_policy` / `require_mention` / allow-lists per scope.

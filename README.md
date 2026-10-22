@@ -72,6 +72,7 @@
 | 语音转写 | `audio.stt` 成为唯一真配置面(OpenAI 兼容端点，如 SiliconFlow SenseVoiceSmall)、`timeout_ms` 真正生效、QQ/微信语音的 **SILK** 由外部解码器处理(ffmpeg 解不了 SILK，启动日志会说明有没有找到)；密钥只走 `config_secrets` / `GOCLAW_AUDIO_STT_API_KEY`。两个面板的 stt 表单此前是"假配置面"，现在都写 `audio.stt` | 配置 → Integrations → Speech-to-Text；桌面端 内置工具 → stt |
 | 技能生态 | ClawHub / GitHub 社区技能源（默认关闭）：搜索→人工检视（文件清单、可执行文件、声明依赖、缺失依赖、是否需要 shell、安全结论只给原因和行号）→安装；装完不授权给任何 agent、不自动 pip/npm 装依赖，内容风险硬拒；agent 侧 `skill_install` 是两步协议且拒绝 cron/心跳/子 agent 发起 | 技能 → 社区；`skills.registries.*` |
 | 消息渠道 | **QQ 官方机器人**(WebSocket bot;群/私聊富媒体上传,TTS 回复渲染成可点的语音条)、**微信个人号 iLink**(面板扫码激活、token 加密入库、加密 CDN 媒体收发且**主机钉定 + 逐跳 SSRF 校验**、协议限制按设计报错而非死循环)、飞书/Lark、Zalo | 渠道 → 新建实例 |
+| 生图 | 适配国产 OpenAI 兼容网关**返回图片 URL** 的形状（智谱 CogView `data[].url`、硅基流动 `images[].url`、`data` 为字符串数组、data URL 五种都读），并由网关把图**下载落盘**——这类链接 24 小时到 30 天就过期，只有工作区那份是长期可用的；厂商参数按白名单透传，`response_format` 对 gpt-image 系列自动不发（那家会直接 400） | 内置工具 → create_image；Providers |
 
 ## 核心特性
 

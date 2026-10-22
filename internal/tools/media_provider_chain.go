@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -125,8 +126,23 @@ func parseChainSettings(raw []byte, defaultModels map[string]string) []MediaProv
 	return result
 }
 
-// buildDefaultChain creates a chain from the hardcoded priority list,
-// including only providers that are currently registered.
+// chainWildcard is a priority-list sentinel meaning "then try every other registered API-key
+// provider". Only tools whose whole point is reaching a vendor endpoint opt in, so a text-only
+// provider is never silently appended to a chain an operator did not ask for.
+const chainWildcard = "*"
+
+// buildDefaultChain creates a chain from the hardcoded priority list, including only providers
+// that are currently registered, and — when the priority list carries chainWildcard — appends
+// every other registered provider that answers to an API key.
+//
+// The second pass is what makes "I added a Zhipu provider in the panel" work without also
+// editing this tool's chain: a gateway that clones the OpenAI /images/generations contract is
+// usable as soon as it is registered. Costs, and why the shape is deliberately conservative:
+//   - a text-only provider can now be reached and answered by an upstream 4xx instead of by a
+//     clear "no image provider configured", so the known vendors keep the front of the chain;
+//   - only API-key providers are appended. An OAuth/Codex credential is a person's subscription,
+//     and spending it on a guess is not the same as spending an API key;
+//   - a provider with no default model is skipped rather than sent an empty "model".
 func buildDefaultChain(
 	ctx context.Context,
 	priority []string,
@@ -134,7 +150,12 @@ func buildDefaultChain(
 	registry *providers.Registry,
 ) []MediaProviderEntry {
 	var chain []MediaProviderEntry
+	inChain := make(map[string]bool, len(priority))
+
 	for _, name := range priority {
+		if name == chainWildcard {
+			continue
+		}
 		if _, err := registry.Get(ctx, name); err == nil {
 			entry := MediaProviderEntry{
 				Provider: name,
@@ -143,7 +164,35 @@ func buildDefaultChain(
 			}
 			entry.applyDefaults()
 			chain = append(chain, entry)
+			inChain[name] = true
 		}
+	}
+
+	if !slices.Contains(priority, chainWildcard) {
+		return chain
+	}
+
+	// Map iteration in List is unordered; sort so a chain, and a log line about it, repeats.
+	others := append([]string(nil), registry.List(ctx)...)
+	slices.Sort(others)
+	for _, name := range others {
+		if inChain[name] {
+			continue
+		}
+		p, err := registry.Get(ctx, name)
+		if err != nil {
+			continue
+		}
+		if _, ok := p.(credentialProvider); !ok {
+			continue
+		}
+		model := p.DefaultModel()
+		if model == "" {
+			continue
+		}
+		entry := MediaProviderEntry{Provider: name, Model: model, Enabled: true}
+		entry.applyDefaults()
+		chain = append(chain, entry)
 	}
 	return chain
 }
@@ -189,6 +238,13 @@ func ExecuteWithChain(
 		// Solo Codex providers (no routing defaults) pass through unchanged.
 		p = wrapPoolProvider(ctx, registry, entry.Provider, p)
 
+		// An entry with no model would otherwise send an empty "model" and get a vendor 400 that
+		// reads like a credentials problem. The provider's own default is the sane stand-in.
+		model := entry.Model
+		if model == "" {
+			model = p.DefaultModel()
+		}
+
 		// credentialProvider is optional — providers that don't expose static
 		// credentials (e.g. OAuth-based CodexProvider) pass nil and each
 		// callProvider falls back to using the provider's Chat() API.
@@ -208,7 +264,7 @@ func ExecuteWithChain(
 		for attempt := 1; attempt <= entry.MaxRetries; attempt++ {
 			timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(entry.Timeout)*time.Second)
 
-			data, usage, callErr := fn(timeoutCtx, cp, entry.Provider, entry.Model, callParams)
+			data, usage, callErr := fn(timeoutCtx, cp, entry.Provider, model, callParams)
 			cancel()
 
 			if callErr == nil {
@@ -216,7 +272,7 @@ func ExecuteWithChain(
 					Data:     data,
 					Usage:    usage,
 					Provider: entry.Provider,
-					Model:    entry.Model,
+					Model:    model,
 				}, nil
 			}
 
@@ -227,7 +283,7 @@ func ExecuteWithChain(
 			// entry and bill them there instead.
 			if isBudgetRefusal(callErr) {
 				slog.Warn("media_chain: budget refused the payload, not falling through",
-					"provider", entry.Provider, "model", entry.Model,
+					"provider", entry.Provider, "model", model,
 					"error", truncateError(callErr))
 				return nil, callErr
 			}
@@ -239,14 +295,14 @@ func ExecuteWithChain(
 
 			if attempt < entry.MaxRetries {
 				slog.Warn("media_chain: attempt failed, retrying",
-					"provider", entry.Provider, "model", entry.Model,
+					"provider", entry.Provider, "model", model,
 					"attempt", attempt, "max_retries", entry.MaxRetries,
 					"error", truncateError(callErr))
 			}
 		}
 
 		slog.Warn("media_chain: provider exhausted retries, moving to next",
-			"provider", entry.Provider, "model", entry.Model,
+			"provider", entry.Provider, "model", model,
 			"max_retries", entry.MaxRetries, "error", truncateError(lastErr))
 	}
 

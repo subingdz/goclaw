@@ -35,8 +35,12 @@ type credentialProvider interface {
 	APIBase() string
 }
 
-// imageGenProviderPriority is the default order for image generation providers.
-var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus"}
+// imageGenProviderPriority is the default order for image generation providers. The trailing
+// chainWildcard means "then try any other registered API-key provider" — which is what lets a
+// Zhipu or SiliconFlow provider added in the panel work for image generation without also being
+// dragged into this tool's chain by hand. Known vendors stay in front so their tuned request
+// shapes win.
+var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minimax", "dashscope", "byteplus", chainWildcard}
 
 // imageGenModelDefaults maps provider names to default image generation models.
 var imageGenModelDefaults = map[string]string{
@@ -46,6 +50,31 @@ var imageGenModelDefaults = map[string]string{
 	"minimax":    "image-01",
 	"dashscope":  "wan2.6-image",
 	"byteplus":   "seedream-5-0-260128",
+}
+
+// forwardedImageParams are the vendor-specific request keys the OpenAI-compatible path passes
+// through from a chain entry's params. The list is deliberately narrow and every name comes from
+// a provider's own documentation: "size"/"quality" (OpenAI, Zhipu CogView) and
+// "image_size"/"num_inference_steps"/"guidance_scale"/"sfw" (SiliconFlow). An unknown field is
+// enough for a strict gateway to answer 400, so nothing else travels.
+var forwardedImageParams = []string{
+	"size", "quality",
+	"image_size", "num_inference_steps", "guidance_scale", "sfw",
+}
+
+// defaultResponseFormat is what the OpenAI-compatible path asks for when the operator expressed
+// no preference. OpenAI's own gpt-image family rejects response_format outright — Azure's
+// reference states the series "does not support this parameter" and always returns base64 — and
+// GoClaw's default OpenAI image model is one of them, so sending the field there produced
+// `400 Unknown parameter: 'response_format'` for a stock configuration. Prefix matching keeps a
+// future gpt-image-n from re-inheriting the bug the way a frozen list would; the panel's
+// response_format field overrides in either direction.
+func defaultResponseFormat(model string) string {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if strings.HasPrefix(m, "gpt-image") || strings.HasPrefix(m, "chatgpt-image") {
+		return "off"
+	}
+	return "b64_json"
 }
 
 // CreateImageTool generates images using an image generation API.
@@ -523,12 +552,31 @@ func (t *CreateImageTool) callImageGenAPI(ctx context.Context, apiKey, apiBase, 
 }
 
 // callStandardImageGenAPI uses the /images/generations endpoint (OpenAI and compatible providers).
+//
+// The request stays OpenAI-shaped because that is what every domestic gateway clones; what is
+// *not* OpenAI-shaped is the answer, so the body is read by generatedImageBytes, which accepts
+// base64, data[] URLs and SiliconFlow's images[] alike. Vendor parameters are forwarded only by
+// name: params also carries internal values, and a field a gateway does not know is enough for
+// it to answer 400.
 func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, apiBase, model, prompt string, params map[string]any) ([]byte, *providers.Usage, error) {
 	body := map[string]any{
-		"model":           model,
-		"prompt":          prompt,
-		"n":               1,
-		"response_format": "b64_json",
+		"model":  model,
+		"prompt": prompt,
+		"n":      1,
+	}
+	// "off" always omits the key. Left unset, the default depends on the model: the gpt-image
+	// family rejects response_format outright, so sending it there is a 400 rather than a hint.
+	format := GetParamString(params, "response_format", "")
+	if format == "" {
+		format = defaultResponseFormat(model)
+	}
+	if format != "off" {
+		body["response_format"] = format
+	}
+	for _, key := range forwardedImageParams {
+		if value, ok := params[key]; ok && value != nil && value != "" {
+			body[key] = value
+		}
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -559,23 +607,10 @@ func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, a
 		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
 	}
 
-	var imgResp struct {
-		Data []struct {
-			B64JSON string `json:"b64_json"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &imgResp); err != nil {
-		return nil, nil, fmt.Errorf("parse response: %w", err)
-	}
-	if len(imgResp.Data) == 0 || imgResp.Data[0].B64JSON == "" {
-		return nil, nil, fmt.Errorf("no image data in response")
-	}
-
-	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
+	imageBytes, err := t.generatedImageBytes(ctx, respBody)
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode base64: %w", err)
+		return nil, nil, err
 	}
-
 	return imageBytes, nil, nil
 }
 
@@ -734,21 +769,9 @@ func (t *CreateImageTool) callOpenAIImageEditMultipart(ctx context.Context, apiK
 		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
 	}
 
-	var imgResp struct {
-		Data []struct {
-			B64JSON string `json:"b64_json"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &imgResp); err != nil {
-		return nil, nil, fmt.Errorf("parse response: %w", err)
-	}
-	if len(imgResp.Data) == 0 || imgResp.Data[0].B64JSON == "" {
-		return nil, nil, fmt.Errorf("no image data in response")
-	}
-
-	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
+	imageBytes, err := t.generatedImageBytes(ctx, respBody)
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode base64: %w", err)
+		return nil, nil, err
 	}
 
 	return imageBytes, nil, nil
@@ -805,10 +828,12 @@ func (t *CreateImageTool) callOpenAIImageEditJSON(ctx context.Context, apiKey, a
 	}
 
 	body := map[string]any{
-		"model":           model,
-		"prompt":          finalPrompt,
-		"images":          images,
-		"response_format": "b64_json",
+		"model":  model,
+		"prompt": finalPrompt,
+		"images": images,
+		// No response_format here on purpose: this path serves the gpt-image family (which
+		// rejects the parameter and always answers base64) and generic compatible gateways
+		// (whose default may be a URL — and generatedImageBytes reads either).
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -839,21 +864,9 @@ func (t *CreateImageTool) callOpenAIImageEditJSON(ctx context.Context, apiKey, a
 		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
 	}
 
-	var imgResp struct {
-		Data []struct {
-			B64JSON string `json:"b64_json"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &imgResp); err != nil {
-		return nil, nil, fmt.Errorf("parse response: %w", err)
-	}
-	if len(imgResp.Data) == 0 || imgResp.Data[0].B64JSON == "" {
-		return nil, nil, fmt.Errorf("no image data in response")
-	}
-
-	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
+	imageBytes, err := t.generatedImageBytes(ctx, respBody)
 	if err != nil {
-		return nil, nil, fmt.Errorf("decode base64: %w", err)
+		return nil, nil, err
 	}
 
 	return imageBytes, nil, nil
