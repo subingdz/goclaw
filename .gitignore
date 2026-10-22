@@ -116,3 +116,6 @@ ui/web/nginx.staging.conf
 **/debug-*.log
 /*.sql
 scripts/docker-patch-*.sql
+
+# Embedded panel staged by the packaging step (go:embed all:dist needs it inside the module)
+internal/webui/dist/
